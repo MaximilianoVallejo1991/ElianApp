@@ -1,0 +1,13 @@
+
+{
+  "name": "splitwise",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm -r run dev",
+    "build": "pnpm -r run build",
+    "db:migrate": "pnpm --filter backend prisma migrate dev",
+    "db:generate": "pnpm --filter backend prisma generate",
+    "db:push": "pnpm --filter backend prisma db push"
+  },
+  "packageManager": "pnpm@9.0.0"
+}
