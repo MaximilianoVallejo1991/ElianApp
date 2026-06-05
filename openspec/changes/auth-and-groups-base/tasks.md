@@ -1,0 +1,68 @@
+# Tasks: Auth & Groups Base
+
+## Review Workload Forecast
+
+| Field | Value |
+|-------|-------|
+| Estimated changed lines | 750–900 |
+| 400-line budget risk | High |
+| Chained PRs recommended | Yes |
+| Suggested split | PR 1 (schema + foundation) → PR 2 (auth) → PR 3 (groups + membership + wiring) → PR 4 (frontend skeleton) |
+| Delivery strategy | ask-on-risk |
+| Chain strategy | stacked-to-main |
+
+Decision needed before apply: Yes
+Chained PRs recommended: Yes
+Chain strategy: stacked-to-main
+400-line budget risk: High
+
+### Suggested Work Units
+
+| Unit | Goal | Likely PR | Notes |
+|------|------|-----------|-------|
+| 1 | Schema migration + utils + middleware (foundation all other tasks depend on) | PR 1 | Base branch; includes deps install (zod, cookie) |
+| 2 | Auth service, controller, routes — register/login/logout/me/forgot-password | PR 2 | Depends on PR 1; standalone testable |
+| 3 | Group + membership services, controllers, routes + index.js wiring | PR 3 | Depends on PR 2; full group lifecycle |
+| 4 | Frontend skeleton — AuthContext, pages, api layer, router setup | PR 4 | Independent; optional if time-constrained |
+
+## Phase 1: Foundation (Schema + Utils + Middleware)
+
+- [x] 1.1 Install missing deps: `cd apps/backend && pnpm add zod cookie`
+- [x] 1.2 Modify `apps/backend/prisma/schema.prisma`: add `BalanceMode` enum (DYNAMIC, STATIC), `MemberStatus` enum (PENDING, ACTIVE, REMOVED), `ownerId String` + `balanceMode BalanceMode @default(DYNAMIC)` to Group, `status MemberStatus @default(PENDING)` to GroupMember, make `joinedAt` optional
+- [ ] 1.3 Run `cd apps/backend && pnpm db:migrate` to generate migration **(BLOCKED: no running PostgreSQL database — Docker not available)**
+- [x] 1.4 Run `cd apps/backend && pnpm db:generate` to regenerate Prisma client
+- [x] 1.5 Create `apps/backend/src/utils/errors.js`: `AppError` class with `(code, status, message)`, `isAppError()` guard
+- [x] 1.6 Create `apps/backend/src/utils/password.js`: `hashPassword(plain)` → bcrypt.hash(plain, 12), `comparePassword(plain, hash)` → bcrypt.compare
+- [x] 1.7 Create `apps/backend/src/utils/jwt.js`: `signToken({ userId, email })` → jwt.sign with env secret, `verifyToken(token)` → jwt.verify
+- [x] 1.8 Create Zod schemas split into `apps/backend/src/schemas/auth.schemas.js` and `apps/backend/src/schemas/group.schemas.js` (split from single schemas.js per orchestrator design)
+- [x] 1.9 Create `apps/backend/src/middleware/error.middleware.js`: global handler mapping AppError codes to HTTP responses, Prisma P2002 → 400
+- [x] 1.10 Create `apps/backend/src/middleware/validate.middleware.js`: factory `(schema) => (req, res, next)` — validates `req.body`, returns 400 on failure
+- [x] 1.11 Create `apps/backend/src/middleware/auth.middleware.js`: reads JWT from cookie, verifies, attaches `req.user = { userId, email }`, returns 401 on missing/invalid
+
+## Phase 2: Auth Implementation
+
+- [ ] 2.1 Create `apps/backend/src/services/auth.service.js`: `register()`, `login()`, `logout()`, `getMe()`, `generateResetToken()` — uses Prisma, bcrypt, jwt utils
+- [ ] 2.2 Create `apps/backend/src/controllers/auth.controller.js`: handlers for register (201), login (200 + Set-Cookie), logout (200 + clear cookie), me (200), forgot-password (200)
+- [ ] 2.3 Create `apps/backend/src/routes/auth.routes.js`: `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me` (protected), `POST /auth/forgot-password` — each with validate middleware
+- [ ] 2.4 Verify: `POST /auth/register` returns 201 with user object, rejects duplicate email/nickName with 400
+
+## Phase 3: Groups + Membership + Wiring
+
+- [ ] 3.1 Create `apps/backend/src/services/group.service.js`: `create()`, `findAll(userId)`, `findById(groupId, userId)`, `update()`, `deleteGroup()` — owner checks, member-only reads
+- [ ] 3.2 Create `apps/backend/src/controllers/group.controller.js`: handlers for create (201), list (200), detail (200), update (200), delete (200) — all protected
+- [ ] 3.3 Create `apps/backend/src/routes/group.routes.js`: `POST /groups`, `GET /groups`, `GET /groups/:id`, `PUT /groups/:id`, `DELETE /groups/:id` — validate + auth middleware
+- [ ] 3.4 Create `apps/backend/src/services/membership.service.js`: `invite()`, `accept()`, `reject()`, `removeMember()`, `leave()` — status transitions, owner guards
+- [ ] 3.5 Create `apps/backend/src/controllers/membership.controller.js`: handlers for invite (201), accept (200), reject (200), remove (200), leave (200)
+- [ ] 3.6 Create `apps/backend/src/routes/membership.routes.js`: `POST /groups/:groupId/members`, `POST /groups/:groupId/members/accept`, `POST /groups/:groupId/members/reject`, `DELETE /groups/:groupId/members/:userId`, `DELETE /groups/:groupId/members/leave`
+- [ ] 3.7 Modify `apps/backend/src/index.js`: import and register all three route groups under `/auth`, `/groups`, mount error middleware last
+- [ ] 3.8 Verify: `GET /groups` without cookie → 401; with cookie → 200; `POST /groups` creates group with ownerId = req.user.userId
+
+## Phase 4: Frontend Skeleton (Secondary — do only if remaining work is simple)
+
+- [ ] 4.1 Setup React Router v7 in `apps/frontend/src/main.jsx`: wrap `<App>` with `<BrowserRouter>`, define routes: `/` (login), `/groups`, `/groups/:id`
+- [ ] 4.2 Create `apps/frontend/src/context/AuthContext.tsx`: provider with `user`, `login()`, `register()`, `logout()` — calls api functions, manages state
+- [ ] 4.3 Create `apps/frontend/src/api/client.ts`: axios instance with `withCredentials: true`, base URL from env
+- [ ] 4.4 Create `apps/frontend/src/pages/Auth.jsx`: combined login/register form (toggle between modes), calls AuthContext
+- [ ] 4.5 Create `apps/frontend/src/pages/Groups.jsx`: list user's groups + create form skeleton
+- [ ] 4.6 Create `apps/frontend/src/pages/GroupDetail.jsx`: group detail skeleton with members list placeholder
+- [ ] 4.7 Update `apps/frontend/src/App.jsx`: replace default content with `<Routes>` outlet or redirect

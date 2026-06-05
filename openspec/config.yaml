@@ -1,0 +1,69 @@
+# openspec/config.yaml
+schema: spec-driven
+
+context: |
+  Tech stack: pnpm monorepo — Express 5 (ESM) backend with Prisma/PostgreSQL,
+    React 19 + Vite + Tailwind CSS 4 frontend, shared package.
+  Architecture: Monorepo with apps/backend, apps/frontend, packages/shared.
+    Backend uses Express + Prisma ORM with PostgreSQL via pg + @prisma/adapter-pg.
+    Frontend uses Vite + React Router + Axios for API calls.
+  Testing: No test runner configured. ESLint on frontend only.
+    TypeScript types installed (devDeps) but backend is plain JS (.js files).
+  Style: JavaScript (ESM), JSX for frontend components.
+  Conventions: pnpm workspaces, Prisma for migrations/data access.
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+    - State delivery risk assessment (ask-on-risk mode)
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+  design:
+    - Include sequence diagrams for complex flows
+    - Document architecture decisions with rationale
+  tasks:
+    - Group by phase, use hierarchical numbering
+    - Keep tasks completable in one session
+  apply:
+    - Follow existing code patterns
+    tdd: false
+    test_command: ""
+  verify:
+    test_command: ""
+    build_command: "pnpm -r run build"
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas
+
+persistence:
+  mode: hybrid
+  artifact_store: openspec + engram
+
+delivery:
+  strategy: ask-on-risk
+  notes: >
+    Before creating a PR, assess risk. If risk is medium or higher
+    (schema changes, auth, payments, data loss), ask the user for
+    explicit go-ahead. Low-risk changes (refactors, tests, docs)
+    may proceed directly.
+
+testing:
+  strict_tdd: false
+  runner: null
+  reason: >
+    No test runner or test files detected in any workspace package.
+    TDD cannot be enforced. Consider adding vitest (frontend) and
+    a test framework for backend before enabling strict TDD.
+  layers:
+    unit: false
+    integration: false
+    e2e: false
+  coverage: false
+  linter: ESLint (frontend only)
+  type_checker: TypeScript available in devDeps (not used — backend is .js)
+  formatter: null
+
+# Marker for tooling — do not edit manually
+initialized_at: "2026-06-05"
+initialized_by: sdd-init (gentle-ai)

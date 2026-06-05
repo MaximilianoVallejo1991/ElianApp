@@ -8,13 +8,16 @@ datasource db {
 }
 
 model Group {
-  id        String   @id @default(cuid())
-  name      String
-  currency  String   @default("ARS")
+  id          String       @id @default(cuid())
+  name        String
+  currency    String       @default("ARS")
+  ownerId     String
+  balanceMode BalanceMode  @default(DYNAMIC)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  owner     User          @relation("GroupOwner", fields: [ownerId], references: [id])
   members   GroupMember[]
   expenses  Expense[]
   payments  Payment[]
@@ -39,6 +42,8 @@ model User {
 
   groups             GroupMember[]
 
+  ownedGroups        Group[]    @relation("GroupOwner")
+
   paidExpenses       Expense[] @relation("ExpensePayer")
   createdExpenses    Expense[] @relation("ExpenseCreator")
 
@@ -51,13 +56,16 @@ model User {
 model GroupMember {
   groupId  String
   userId   String
+  status   MemberStatus @default(PENDING)
 
-  joinedAt DateTime @default(now())
+  joinedAt DateTime?
 
   group    Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
   user     User  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([groupId, userId])
+  @@index([userId])
+  @@index([groupId])
 }
 
 model Payment {
@@ -93,6 +101,17 @@ enum ExpenseSplitType {
   EQUAL
   EXACT
   PERCENTAGE
+}
+
+enum BalanceMode {
+  DYNAMIC
+  STATIC
+}
+
+enum MemberStatus {
+  PENDING
+  ACTIVE
+  REMOVED
 }
 
 model Expense {
