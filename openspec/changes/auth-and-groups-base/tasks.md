@@ -59,10 +59,15 @@ Chain strategy: stacked-to-main
 
 ## Phase 4: Frontend Skeleton (Secondary — do only if remaining work is simple)
 
-- [ ] 4.1 Setup React Router v7 in `apps/frontend/src/main.jsx`: wrap `<App>` with `<BrowserRouter>`, define routes: `/` (login), `/groups`, `/groups/:id`
-- [ ] 4.2 Create `apps/frontend/src/context/AuthContext.tsx`: provider with `user`, `login()`, `register()`, `logout()` — calls api functions, manages state
-- [ ] 4.3 Create `apps/frontend/src/api/client.ts`: axios instance with `withCredentials: true`, base URL from env
-- [ ] 4.4 Create `apps/frontend/src/pages/Auth.jsx`: combined login/register form (toggle between modes), calls AuthContext
-- [ ] 4.5 Create `apps/frontend/src/pages/Groups.jsx`: list user's groups + create form skeleton
-- [ ] 4.6 Create `apps/frontend/src/pages/GroupDetail.jsx`: group detail skeleton with members list placeholder
-- [ ] 4.7 Update `apps/frontend/src/App.jsx`: replace default content with `<Routes>` outlet or redirect
+- [x] 4.1 Install frontend deps: `@heroicons/react` (axios + react-router-dom already present)
+- [x] 4.2 Create `apps/frontend/src/services/api.js`: axios instance (baseURL localhost:4000, withCredentials: true), authService (login, register, logout, getMe), groupService (getAll, getById, create), response interceptor for error mapping
+- [x] 4.3 Create `apps/frontend/src/context/AuthContext.jsx`: AuthProvider with user state, isLoading, login(), register(), logout() — calls api services, getMe() on mount for session restore
+- [x] 4.4 Create `apps/frontend/src/App.jsx`: BrowserRouter + AuthProvider + Routes (/login, /register, /groups, /groups/:id), ProtectedRoute component with loading spinner and redirect
+- [x] 4.5 Create `apps/frontend/src/pages/LoginPage.jsx`: email + password form with Heroicons, validation, loading state, error banner, link to /register, Exaggerated Minimalism styling
+- [x] 4.6 Create `apps/frontend/src/pages/RegisterPage.jsx`: email + nickName + password form with Heroicons, validation, loading state, error banner, link to /login
+- [x] 4.7 Create `apps/frontend/src/pages/GroupsPage.jsx`: group list (cards with name, currency, member count, balance mode badge), create group modal with currency selector, empty state, sign out button, loading/error states
+- [x] 4.8 Create `apps/frontend/src/pages/GroupDetailPage.jsx`: group header (name, currency, balance mode, member count), members list with status badges, owner badge, expenses placeholder, back navigation, loading/error/404 states
+- [x] 4.9 Update `apps/frontend/src/index.css`: Tailwind v4 @import + @theme design tokens (primary, secondary, cta, background, text, text-muted, border, error, success), Lexend + Source Sans 3 Google Fonts, prefers-reduced-motion support
+- [x] 4.10 Update `apps/frontend/index.html`: change title to "Splitwise"
+- [x] 4.11 Remove `apps/frontend/src/App.css` (replaced by Tailwind)
+- [x] 4.12 Fix backend `auth.controller.js` register handler: now sets JWT cookie after registration (same as login) so the user is immediately authenticated

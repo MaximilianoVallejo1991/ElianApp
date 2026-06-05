@@ -39,6 +39,11 @@ const LOGIN_COOKIE = {
 export async function register(req, res) {
   const { email, nickName, password } = req.body;
   const user = await authService.register({ email, nickName, password });
+
+  // Set JWT cookie so the user is logged in immediately after registration
+  const token = signToken({ userId: user.id, email: user.email });
+  res.cookie('token', token, LOGIN_COOKIE);
+
   res.status(201).json(user);
 }
 
