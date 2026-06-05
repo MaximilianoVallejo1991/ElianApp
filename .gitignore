@@ -15,4 +15,5 @@ pnpm-debug.log
 Thumbs.db
 
 # Atl (agent config - personal)
-.atl/
+
+.engram
