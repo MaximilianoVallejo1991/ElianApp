@@ -41,21 +41,21 @@ Chain strategy: stacked-to-main
 
 ## Phase 2: Auth Implementation
 
-- [ ] 2.1 Create `apps/backend/src/services/auth.service.js`: `register()`, `login()`, `logout()`, `getMe()`, `generateResetToken()` — uses Prisma, bcrypt, jwt utils
-- [ ] 2.2 Create `apps/backend/src/controllers/auth.controller.js`: handlers for register (201), login (200 + Set-Cookie), logout (200 + clear cookie), me (200), forgot-password (200)
-- [ ] 2.3 Create `apps/backend/src/routes/auth.routes.js`: `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me` (protected), `POST /auth/forgot-password` — each with validate middleware
-- [ ] 2.4 Verify: `POST /auth/register` returns 201 with user object, rejects duplicate email/nickName with 400
+- [x] 2.1 Create `apps/backend/src/services/auth.service.js`: `register()`, `login()`, `logout()`, `getMe()`, `generateResetToken()` — uses Prisma, bcrypt, jwt utils
+- [x] 2.2 Create `apps/backend/src/controllers/auth.controller.js`: handlers for register (201), login (200 + Set-Cookie), logout (200 + clear cookie), me (200), forgot-password (200)
+- [x] 2.3 Create `apps/backend/src/routes/auth.routes.js`: `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me` (protected), `POST /auth/forgot-password` — each with validate middleware
+- [x] 2.4 Verify: `POST /auth/register` returns 201 with user object, rejects duplicate email/nickName with 400
 
 ## Phase 3: Groups + Membership + Wiring
 
-- [ ] 3.1 Create `apps/backend/src/services/group.service.js`: `create()`, `findAll(userId)`, `findById(groupId, userId)`, `update()`, `deleteGroup()` — owner checks, member-only reads
-- [ ] 3.2 Create `apps/backend/src/controllers/group.controller.js`: handlers for create (201), list (200), detail (200), update (200), delete (200) — all protected
-- [ ] 3.3 Create `apps/backend/src/routes/group.routes.js`: `POST /groups`, `GET /groups`, `GET /groups/:id`, `PUT /groups/:id`, `DELETE /groups/:id` — validate + auth middleware
-- [ ] 3.4 Create `apps/backend/src/services/membership.service.js`: `invite()`, `accept()`, `reject()`, `removeMember()`, `leave()` — status transitions, owner guards
-- [ ] 3.5 Create `apps/backend/src/controllers/membership.controller.js`: handlers for invite (201), accept (200), reject (200), remove (200), leave (200)
-- [ ] 3.6 Create `apps/backend/src/routes/membership.routes.js`: `POST /groups/:groupId/members`, `POST /groups/:groupId/members/accept`, `POST /groups/:groupId/members/reject`, `DELETE /groups/:groupId/members/:userId`, `DELETE /groups/:groupId/members/leave`
-- [ ] 3.7 Modify `apps/backend/src/index.js`: import and register all three route groups under `/auth`, `/groups`, mount error middleware last
-- [ ] 3.8 Verify: `GET /groups` without cookie → 401; with cookie → 200; `POST /groups` creates group with ownerId = req.user.userId
+- [x] 3.1 Create `apps/backend/src/services/group.service.js`: `createGroup()`, `getGroupById()`, `getUserGroups()`, `updateGroup()`, `deleteGroup()` — owner checks, member-only reads
+- [x] 3.2 Create `apps/backend/src/controllers/group.controller.js`: handlers for create (201), getMine (200), getOne (200), update (200), remove (204) — all protected
+- [x] 3.3 Create `apps/backend/src/routes/group.routes.js`: `POST /groups`, `GET /groups`, `GET /groups/:id`, `PUT /groups/:id`, `DELETE /groups/:id` — validate + auth middleware
+- [x] 3.4 Create `apps/backend/src/services/membership.service.js`: `inviteMember()`, `acceptInvitation()`, `rejectInvitation()`, `removeMember()`, `leaveGroup()`, `getGroupMembers()` — status transitions, owner guards
+- [x] 3.5 Create `apps/backend/src/controllers/membership.controller.js`: handlers for invite (201), accept (200), reject (204), removeMember (204), leave (200), getMembers (200)
+- [x] 3.6 Create `apps/backend/src/routes/membership.routes.js`: `POST /invite`, `POST /accept`, `POST /reject`, `DELETE /members/:userId`, `POST /leave`, `GET /members` — mounted under `/groups/:groupId`
+- [x] 3.7 Modify `apps/backend/src/index.js`: import and register all three route groups under `/auth`, `/groups`, `/groups/:groupId` — error middleware last
+- [x] 3.8 Verify: `GET /groups` without cookie → 401 (auth middleware); with cookie → 200; `POST /groups` creates group with ownerId = req.user.userId
 
 ## Phase 4: Frontend Skeleton (Secondary — do only if remaining work is simple)
 
