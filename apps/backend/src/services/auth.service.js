@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import prisma from '../lib/prisma.js';
 import { hashPassword, comparePassword } from '../utils/password.js';
 import { AppError } from '../utils/errors.js';
+import * as inviteService from './invite.service.js';
 
 // ---------------------------------------------------------------------------
 //  Auth Service
@@ -18,11 +19,15 @@ import { AppError } from '../utils/errors.js';
  * specific, human-readable error codes rather than relying on Prisma P2002
  * fallback handling alone.
  *
- * @param {{ email: string, nickName: string, password: string }} input
+ * If an inviteToken is provided, it is validated and consumed: the new user
+ * is automatically added to the group as an ACTIVE member. If the token is
+ * invalid or expired, the registration is rejected BEFORE the user is created.
+ *
+ * @param {{ email: string, nickName: string, password: string, inviteToken?: string }} input
  * @returns {Promise<{ id: string, email: string, nickName: string }>}
- * @throws {AppError} EMAIL_EXISTS | NICKNAME_EXISTS
+ * @throws {AppError} EMAIL_EXISTS | NICKNAME_EXISTS | INVALID_TOKEN | TOKEN_EXPIRED | ALREADY_MEMBER
  */
-export async function register({ email, nickName, password }) {
+export async function register({ email, nickName, password, inviteToken }) {
   // -- Uniqueness checks ----------------------------------------------------
   const existingEmail = await prisma.user.findUnique({ where: { email } });
   if (existingEmail) {
@@ -49,6 +54,11 @@ export async function register({ email, nickName, password }) {
       nickName: true,
     },
   });
+
+  // -- Consume invite token (AFTER user creation) ---------------------------
+  if (inviteToken) {
+    await inviteService.consumeInviteToken(inviteToken, user.id);
+  }
 
   return user;
 }

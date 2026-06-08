@@ -1,16 +1,44 @@
-import { useState } from 'react';
-import { Link, useNavigate, Navigate } from 'react-router-dom';
-import { EnvelopeIcon, LockClosedIcon } from '@heroicons/react/24/outline';
-import { useAuth } from '../context/AuthContext';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate, Navigate, useSearchParams } from 'react-router-dom';
+import { EnvelopeIcon, LockClosedIcon, UserGroupIcon } from '@heroicons/react/24/outline';
+import { useAuth } from '../hooks/useAuth';
+import { inviteService } from '../services/api';
 
 export default function LoginPage() {
   const { login, user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  const inviteToken = searchParams.get('invite');
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Invite group name state
+  const [inviteGroupName, setInviteGroupName] = useState('');
+  const [inviteLoading, setInviteLoading] = useState(false);
+
+  // Validate invite token on mount
+  useEffect(() => {
+    if (!inviteToken) return;
+
+    async function validateToken() {
+      setInviteLoading(true);
+      try {
+        const response = await inviteService.validateToken(inviteToken);
+        setInviteGroupName(response.data.groupName);
+      } catch {
+        // Token invalid — show generic error
+        setInviteGroupName('');
+      } finally {
+        setInviteLoading(false);
+      }
+    }
+
+    validateToken();
+  }, [inviteToken]);
 
   // Redirect if already logged in
   if (user) {
@@ -38,6 +66,12 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
+
+      // If there's an invite token, auto-join the group after login
+      if (inviteToken) {
+        await inviteService.acceptInvite(inviteToken);
+      }
+
       navigate('/groups', { replace: true });
     } catch (err) {
       setError(err.message || 'Login failed. Please try again.');
@@ -54,12 +88,34 @@ export default function LoginPage() {
           <h1
             className="font-heading text-[clamp(2.5rem,8vw,4.5rem)] font-black leading-none tracking-[-0.05em] text-primary"
           >
-            Splitwise
+            ElianApp
           </h1>
           <p className="mt-3 text-lg text-text-muted">
             Welcome back. Sign in to your account.
           </p>
         </div>
+
+        {/* Invite banner */}
+        {inviteLoading && (
+          <div className="flex items-center justify-center gap-2 rounded-xl border border-border bg-white px-5 py-4">
+            <div
+              className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent"
+              role="status"
+              aria-label="Validating invite link"
+            />
+            <span className="text-sm text-text-muted">Validating invite link…</span>
+          </div>
+        )}
+
+        {inviteGroupName && (
+          <div className="rounded-xl border border-cta/30 bg-cta/5 px-5 py-4 text-center">
+            <div className="mb-1 flex items-center justify-center gap-2">
+              <UserGroupIcon className="h-5 w-5 text-cta" aria-hidden="true" />
+              <span className="text-sm font-semibold text-cta">You're joining</span>
+            </div>
+            <p className="font-heading text-lg font-bold text-primary">{inviteGroupName}</p>
+          </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6" noValidate>
@@ -141,7 +197,7 @@ export default function LoginPage() {
         <p className="text-center text-sm text-text-muted">
           Don&apos;t have an account?{' '}
           <Link
-            to="/register"
+            to={inviteToken ? `/register?invite=${inviteToken}` : '/register'}
             className="font-semibold text-secondary underline-offset-2 transition-colors duration-200 hover:text-secondary/80 hover:underline"
           >
             Create one

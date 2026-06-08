@@ -1,7 +1,7 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useState, useEffect, useCallback } from 'react';
 import { authService } from '../services/api';
 
-const AuthContext = createContext(null);
+export const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -20,6 +20,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial session check
     getMe();
   }, [getMe]);
 
@@ -29,8 +30,12 @@ export function AuthProvider({ children }) {
     return response.data;
   };
 
-  const register = async (email, nickName, password) => {
-    const response = await authService.register(email, nickName, password);
+  const register = async (email, nickName, password, inviteToken) => {
+    const payload = { email, nickName, password };
+    if (inviteToken) {
+      payload.inviteToken = inviteToken;
+    }
+    const response = await authService.register(payload);
     setUser(response.data);
     return response.data;
   };
@@ -45,12 +50,4 @@ export function AuthProvider({ children }) {
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
 }

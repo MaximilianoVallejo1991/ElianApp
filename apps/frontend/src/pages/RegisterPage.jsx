@@ -1,11 +1,15 @@
-import { useState } from 'react';
-import { Link, useNavigate, Navigate } from 'react-router-dom';
-import { EnvelopeIcon, UserIcon, LockClosedIcon } from '@heroicons/react/24/outline';
-import { useAuth } from '../context/AuthContext';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate, Navigate, useSearchParams } from 'react-router-dom';
+import { EnvelopeIcon, UserIcon, LockClosedIcon, UserGroupIcon } from '@heroicons/react/24/outline';
+import { useAuth } from '../hooks/useAuth';
+import { inviteService } from '../services/api';
 
 export default function RegisterPage() {
   const { register, user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  const inviteToken = searchParams.get('invite');
 
   const [email, setEmail] = useState('');
   const [nickName, setNickName] = useState('');
@@ -13,8 +17,46 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Redirect if already logged in
-  if (user) {
+  // Invite token state
+  const [inviteGroupName, setInviteGroupName] = useState('');
+  const [inviteError, setInviteError] = useState('');
+  const [inviteLoading, setInviteLoading] = useState(!!inviteToken);
+  const [autoJoining, setAutoJoining] = useState(false);
+
+  // Validate invite token on mount
+  useEffect(() => {
+    if (!inviteToken) return;
+
+    async function validateToken() {
+      setInviteLoading(true);
+      setInviteError('');
+      try {
+        const response = await inviteService.validateToken(inviteToken);
+        setInviteGroupName(response.data.groupName);
+
+        // If user is already logged in, auto-join the group
+        if (user) {
+          setAutoJoining(true);
+          await inviteService.acceptInvite(inviteToken);
+          navigate('/groups', { replace: true });
+        }
+      } catch (err) {
+        setInviteError(
+          err.code === 'TOKEN_EXPIRED'
+            ? 'This invite link has expired.'
+            : 'Invalid or expired invite link.',
+        );
+      } finally {
+        setInviteLoading(false);
+        setAutoJoining(false);
+      }
+    }
+
+    validateToken();
+  }, [inviteToken, user]);
+
+  // Redirect if already logged in and not processing an invite
+  if (user && !inviteToken) {
     return <Navigate to="/groups" replace />;
   }
 
@@ -32,6 +74,12 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
 
+    // If invite token exists but is invalid, block submission
+    if (inviteToken && inviteError) {
+      setError(inviteError);
+      return;
+    }
+
     const validationError = validate();
     if (validationError) {
       setError(validationError);
@@ -40,7 +88,7 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
-      await register(email, nickName.trim(), password);
+      await register(email, nickName.trim(), password, inviteToken);
       navigate('/groups', { replace: true });
     } catch (err) {
       setError(err.message || 'Registration failed. Please try again.');
@@ -57,12 +105,54 @@ export default function RegisterPage() {
           <h1
             className="font-heading text-[clamp(2.5rem,8vw,4.5rem)] font-black leading-none tracking-[-0.05em] text-primary"
           >
-            Splitwise
+            ElianApp
           </h1>
           <p className="mt-3 text-lg text-text-muted">
             Create your account and start splitting expenses.
           </p>
         </div>
+
+        {/* Invite banner */}
+        {inviteLoading && !autoJoining && (
+          <div className="flex items-center justify-center gap-2 rounded-xl border border-border bg-white px-5 py-4">
+            <div
+              className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent"
+              role="status"
+              aria-label="Validating invite link"
+            />
+            <span className="text-sm text-text-muted">Validating invite link…</span>
+          </div>
+        )}
+
+        {autoJoining && (
+          <div className="flex items-center justify-center gap-2 rounded-xl border border-border bg-white px-5 py-4">
+            <div
+              className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent"
+              role="status"
+              aria-label="Joining group"
+            />
+            <span className="text-sm text-text-muted">Joining {inviteGroupName}…</span>
+          </div>
+        )}
+
+        {inviteGroupName && (
+          <div className="rounded-xl border border-cta/30 bg-cta/5 px-5 py-4 text-center">
+            <div className="mb-1 flex items-center justify-center gap-2">
+              <UserGroupIcon className="h-5 w-5 text-cta" aria-hidden="true" />
+              <span className="text-sm font-semibold text-cta">You're joining</span>
+            </div>
+            <p className="font-heading text-lg font-bold text-primary">{inviteGroupName}</p>
+          </div>
+        )}
+
+        {inviteError && (
+          <div
+            className="rounded-lg border border-error/30 bg-error/5 px-4 py-3 text-center text-sm text-error"
+            role="alert"
+          >
+            {inviteError}
+          </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-5" noValidate>
@@ -168,7 +258,7 @@ export default function RegisterPage() {
         <p className="text-center text-sm text-text-muted">
           Already have an account?{' '}
           <Link
-            to="/login"
+            to={inviteToken ? `/login?invite=${inviteToken}` : '/login'}
             className="font-semibold text-secondary underline-offset-2 transition-colors duration-200 hover:text-secondary/80 hover:underline"
           >
             Sign in

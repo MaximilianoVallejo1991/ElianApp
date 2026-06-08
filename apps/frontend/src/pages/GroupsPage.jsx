@@ -7,7 +7,7 @@ import {
   CurrencyDollarIcon,
   ArrowRightOnRectangleIcon,
 } from '@heroicons/react/24/outline';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import { groupService } from '../services/api';
 
 export default function GroupsPage() {
@@ -25,10 +25,6 @@ export default function GroupsPage() {
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState('');
 
-  useEffect(() => {
-    loadGroups();
-  }, []);
-
   const loadGroups = async () => {
     setLoading(true);
     try {
@@ -40,6 +36,11 @@ export default function GroupsPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data fetch
+    loadGroups();
+  }, []);
 
   const handleCreate = async (e) => {
     e.preventDefault();

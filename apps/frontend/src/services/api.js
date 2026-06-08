@@ -40,8 +40,8 @@ export const authService = {
   login: (email, password) =>
     api.post('/auth/login', { email, password }),
 
-  register: (email, nickName, password) =>
-    api.post('/auth/register', { email, nickName, password }),
+  register: ({ email, nickName, password, inviteToken }) =>
+    api.post('/auth/register', { email, nickName, password, inviteToken }),
 
   logout: () =>
     api.post('/auth/logout'),
@@ -63,6 +63,113 @@ export const groupService = {
 
   create: (data) =>
     api.post('/groups', data),
+};
+
+//
+// Expense API
+//
+
+export const expenseService = {
+  create: (groupId, data) =>
+    api.post(`/groups/${groupId}/expenses`, data),
+
+  getAll: (groupId) =>
+    api.get(`/groups/${groupId}/expenses`),
+
+  getOne: (groupId, expenseId) =>
+    api.get(`/groups/${groupId}/expenses/${expenseId}`),
+
+  update: (groupId, expenseId, data) =>
+    api.put(`/groups/${groupId}/expenses/${expenseId}`, data),
+
+  delete: (groupId, expenseId) =>
+    api.delete(`/groups/${groupId}/expenses/${expenseId}`),
+};
+
+//
+// Payment API
+//
+
+export const paymentService = {
+  create: (groupId, data) =>
+    api.post(`/groups/${groupId}/payments`, data),
+
+  getAll: (groupId) =>
+    api.get(`/groups/${groupId}/payments`),
+
+  delete: (groupId, paymentId) =>
+    api.delete(`/groups/${groupId}/payments/${paymentId}`),
+};
+
+//
+// Balance API
+//
+
+export const balanceService = {
+  getBalances: (groupId) =>
+    api.get(`/groups/${groupId}/balances`),
+};
+
+//
+// Invite API
+//
+
+export const inviteService = {
+  generateInviteLink: (groupId) =>
+    api.post(`/groups/${groupId}/invite-link`),
+
+  validateToken: (token) =>
+    api.get(`/invites/${token}`),
+
+  acceptInvite: (token) =>
+    api.post(`/invites/${token}/accept`),
+};
+
+//
+// Collective Expense API
+//
+
+export const collectiveExpenseService = {
+  create: (groupId, data) =>
+    api.post(`/groups/${groupId}/collective-expenses`, data),
+
+  getAll: (groupId) =>
+    api.get(`/groups/${groupId}/collective-expenses`),
+
+  getById: (groupId, id) =>
+    api.get(`/groups/${groupId}/collective-expenses/${id}`),
+
+  update: (groupId, id, data) =>
+    api.put(`/groups/${groupId}/collective-expenses/${id}`, data),
+
+  remove: (groupId, id) =>
+    api.delete(`/groups/${groupId}/collective-expenses/${id}`),
+
+  unlock: (groupId, id) =>
+    api.post(`/groups/${groupId}/collective-expenses/${id}/unlock`),
+};
+
+//
+// Individual Item API
+//
+
+export const individualItemService = {
+  add: (groupId, collectiveExpenseId, data) =>
+    api.post(
+      `/groups/${groupId}/collective-expenses/${collectiveExpenseId}/items`,
+      data
+    ),
+
+  update: (groupId, collectiveExpenseId, itemId, data) =>
+    api.put(
+      `/groups/${groupId}/collective-expenses/${collectiveExpenseId}/items/${itemId}`,
+      data
+    ),
+
+  delete: (groupId, collectiveExpenseId, itemId) =>
+    api.delete(
+      `/groups/${groupId}/collective-expenses/${collectiveExpenseId}/items/${itemId}`
+    ),
 };
 
 export default api;

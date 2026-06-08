@@ -35,10 +35,12 @@ const LOGIN_COOKIE = {
  * POST /auth/register
  *
  * Body validated by Zod middleware before this handler runs.
+ * If an inviteToken is provided and valid, the new user is automatically
+ * added to the group as an ACTIVE member.
  */
 export async function register(req, res) {
-  const { email, nickName, password } = req.body;
-  const user = await authService.register({ email, nickName, password });
+  const { email, nickName, password, inviteToken } = req.body;
+  const user = await authService.register({ email, nickName, password, inviteToken });
 
   // Set JWT cookie so the user is logged in immediately after registration
   const token = signToken({ userId: user.id, email: user.email });

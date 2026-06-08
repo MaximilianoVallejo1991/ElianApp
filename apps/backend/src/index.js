@@ -8,11 +8,19 @@ import { errorHandler } from './middleware/error.middleware.js';
 import authRoutes from './routes/auth.routes.js';
 import groupRoutes from './routes/group.routes.js';
 import membershipRoutes from './routes/membership.routes.js';
+import expenseRoutes from './routes/expense.routes.js';
+import paymentRoutes from './routes/payment.routes.js';
+import inviteRoutes from './routes/invite.routes.js';
+import collectiveExpenseRoutes from './routes/collective-expense.routes.js';
+import individualItemRoutes from './routes/individual-item.routes.js';
 
 const app = express();
 
 // --- Global middleware -------------------------------------------------------
-app.use(cors());
+app.use(cors({
+  origin: process.env.CORS_ORIGIN,
+  credentials: true
+}));
 app.use(express.json());
 app.use(cookieParser());
 
@@ -24,7 +32,17 @@ app.get('/health', (_req, res) => {
 // --- Route groups ------------------------------------------------------------
 app.use('/auth', authRoutes);
 app.use('/groups', groupRoutes);
+
+// Mount specific paths BEFORE generic /groups/:groupId to avoid route capture
+app.use('/invites', inviteRoutes);
+app.use('/groups/:groupId/collective-expenses', collectiveExpenseRoutes);
+app.use('/groups/:groupId/collective-expenses/:id', individualItemRoutes);
+
+// Generic group sub-routes (order matters — more specific paths first)
 app.use('/groups/:groupId', membershipRoutes);
+app.use('/groups/:groupId', expenseRoutes);
+app.use('/groups/:groupId', paymentRoutes);
+app.use('/groups/:groupId', inviteRoutes);
 
 // --- Error handler (MUST be last) --------------------------------------------
 app.use(errorHandler);

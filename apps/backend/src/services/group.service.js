@@ -44,12 +44,15 @@ export async function createGroup({ name, currency, balanceMode, ownerId }) {
 }
 
 /**
- * Get a single group by ID with its owner and members included.
+ * Get a single group by ID with its owner, active members, expenses, and payments included.
  *
  * Does NOT check membership — the controller enforces access control.
  *
+ * Members are filtered to ACTIVE only. Expenses include splits + payer.
+ * Payments include fromUser + toUser. Both ordered newest first.
+ *
  * @param {string} groupId
- * @returns {Promise<object>} group with owner and members
+ * @returns {Promise<object>} group with owner, members, expenses, and payments
  * @throws {AppError} NOT_FOUND
  */
 export async function getGroupById(groupId) {
@@ -60,11 +63,38 @@ export async function getGroupById(groupId) {
         select: { id: true, email: true, nickName: true },
       },
       members: {
+        where: { status: 'ACTIVE' },
         include: {
           user: {
             select: { id: true, email: true, nickName: true },
           },
         },
+      },
+      expenses: {
+        include: {
+          splits: {
+            include: {
+              user: {
+                select: { id: true, email: true, nickName: true },
+              },
+            },
+          },
+          payer: {
+            select: { id: true, email: true, nickName: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      },
+      payments: {
+        include: {
+          fromUser: {
+            select: { id: true, email: true, nickName: true },
+          },
+          toUser: {
+            select: { id: true, email: true, nickName: true },
+          },
+        },
+        orderBy: { paidAt: 'desc' },
       },
     },
   });

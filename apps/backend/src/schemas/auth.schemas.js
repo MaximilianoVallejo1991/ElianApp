@@ -7,6 +7,7 @@ import { z } from 'zod';
  *   - email: valid email format
  *   - nickName: 3-30 chars, alphanumeric + underscores
  *   - password: min 8 chars
+ *   - inviteToken: optional, consumed to auto-join a group with ACTIVE status
  */
 export const registerSchema = z.object({
   email: z
@@ -20,6 +21,10 @@ export const registerSchema = z.object({
   password: z
     .string()
     .min(8, 'Password must be at least 8 characters'),
+  inviteToken: z
+    .string()
+    .uuid('Invalid invite token format')
+    .optional(),
 });
 
 /**
