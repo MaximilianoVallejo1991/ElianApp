@@ -4,6 +4,8 @@ import { validate } from '../middleware/validate.middleware.js';
 import {
   createExpenseSchema,
   updateExpenseSchema,
+  createItemSchema,
+  updateItemSchema,
 } from '../schemas/expense.schemas.js';
 import * as expenseController from '../controllers/expense.controller.js';
 import * as balanceController from '../controllers/balance.controller.js';
@@ -50,6 +52,34 @@ router.put(
 // DELETE /groups/:groupId/expenses/:id
 // Delete an expense (hard delete). Only payer/creator can delete.
 router.delete('/expenses/:id', expenseController.remove);
+
+// POST /groups/:groupId/expenses/:id/items
+// Report (upsert) an item for a COLLECTIVE expense.
+router.post(
+  '/expenses/:id/items',
+  validate(createItemSchema),
+  expenseController.addItem,
+);
+
+// PATCH /groups/:groupId/expenses/:id/items/:itemId
+// Update an existing item on a COLLECTIVE expense.
+router.patch(
+  '/expenses/:id/items/:itemId',
+  validate(updateItemSchema),
+  expenseController.updateItem,
+);
+
+// DELETE /groups/:groupId/expenses/:id/items/:itemId
+// Delete an item from a COLLECTIVE expense.
+router.delete('/expenses/:id/items/:itemId', expenseController.removeItem);
+
+// GET /groups/:groupId/expenses/:id/items/status
+// Get item reporting status for a COLLECTIVE expense.
+router.get('/expenses/:id/items/status', expenseController.getItemStatus);
+
+// POST /groups/:groupId/expenses/:id/unlock
+// Unlock a COMPLETED COLLECTIVE expense for further item edits.
+router.post('/expenses/:id/unlock', expenseController.unlock);
 
 // --- Balance route (mounted under the same /groups/:groupId prefix) ---------
 

@@ -24,7 +24,6 @@ model Group {
   members             GroupMember[]
   expenses            Expense[]
   payments            Payment[]
-  collectiveExpenses  CollectiveExpense[]
 }
 
 model User {
@@ -55,8 +54,7 @@ model User {
   receivedPayments        Payment[]      @relation("PaymentReceiver")
 
   expenseSplits           ExpenseSplit[]
-  createdCollectiveExpenses CollectiveExpense[] @relation("CollectiveExpenseCreator")
-  individualItems         IndividualItem[] @relation("IndividualItemUser")
+  expenseItems            ExpenseItem[] @relation("ExpenseItemUser")
 }
 
 model GroupMember {
@@ -107,11 +105,18 @@ enum ExpenseSplitType {
   EQUAL
   EXACT
   PERCENTAGE
+  COLLECTIVE
 }
 
 enum BalanceMode {
   DYNAMIC
   STATIC
+}
+
+enum ExpenseStatus {
+  PENDING
+  MISMATCH
+  COMPLETED
 }
 
 enum MemberStatus {
@@ -137,6 +142,11 @@ model Expense {
   category    ExpenseCategory
   splitType   ExpenseSplitType
 
+  status      ExpenseStatus @default(COMPLETED)
+  isLocked    Boolean       @default(true)
+  sharedCosts Decimal?      @default(0)
+  participantIds String[]   @default([])
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -147,6 +157,7 @@ model Expense {
   createdBy   User @relation("ExpenseCreator", fields: [createdById], references: [id])
 
   splits      ExpenseSplit[]
+  items       ExpenseItem[]
 }
 
 model ExpenseSplit {
@@ -164,48 +175,19 @@ model ExpenseSplit {
   @@unique([expenseId, userId])
 }
 
-enum CollectiveExpenseStatus {
-  PENDING
-  MATCH
-  MISMATCH
-  COMPLETED
-}
+model ExpenseItem {
+  id          String   @id @default(cuid())
+  expenseId   String
+  userId      String
+  amount      Decimal
+  description String?  @default("mi gasto")
+  dateReported DateTime @default(now())
+  createdAt   DateTime @default(now())
 
-model CollectiveExpense {
-  id             String                  @id @default(cuid())
-  groupId        String
-  creatorId      String
-  description    String?
-  total          Decimal
-  sharedCosts    Decimal
-  status         CollectiveExpenseStatus @default(PENDING)
-  isLocked       Boolean                 @default(false)
-  participantIds String[]
+  expense     Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  user        User     @relation("ExpenseItemUser", fields: [userId], references: [id])
 
-  createdAt      DateTime                @default(now())
-  updatedAt      DateTime                @updatedAt
-
-  group          Group                   @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  creator        User                    @relation("CollectiveExpenseCreator", fields: [creatorId], references: [id])
-  items          IndividualItem[]
-
-  @@index([groupId])
-  @@index([creatorId])
-}
-
-model IndividualItem {
-  id                  String   @id @default(cuid())
-  collectiveExpenseId String
-  userId              String
-  amount              Decimal
-  description         String?
-
-  createdAt           DateTime @default(now())
-
-  collectiveExpense   CollectiveExpense @relation(fields: [collectiveExpenseId], references: [id], onDelete: Cascade)
-  user                User              @relation("IndividualItemUser", fields: [userId], references: [id])
-
-  @@unique([collectiveExpenseId, userId])
-  @@index([collectiveExpenseId])
+  @@unique([expenseId, userId])
+  @@index([expenseId])
   @@index([userId])
 }

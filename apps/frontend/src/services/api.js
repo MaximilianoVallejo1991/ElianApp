@@ -84,6 +84,22 @@ export const expenseService = {
 
   delete: (groupId, expenseId) =>
     api.delete(`/groups/${groupId}/expenses/${expenseId}`),
+
+  // Item reporting for COLLECTIVE expenses
+  reportItem: (groupId, expenseId, data) =>
+    api.post(`/groups/${groupId}/expenses/${expenseId}/items`, data),
+
+  updateItem: (groupId, expenseId, itemId, data) =>
+    api.put(`/groups/${groupId}/expenses/${expenseId}/items/${itemId}`, data),
+
+  deleteItem: (groupId, expenseId, itemId) =>
+    api.delete(`/groups/${groupId}/expenses/${expenseId}/items/${itemId}`),
+
+  getItemStatus: (groupId, expenseId) =>
+    api.get(`/groups/${groupId}/expenses/${expenseId}/items/status`),
+
+  unlockExpense: (groupId, expenseId) =>
+    api.post(`/groups/${groupId}/expenses/${expenseId}/unlock`),
 };
 
 //
@@ -123,53 +139,6 @@ export const inviteService = {
 
   acceptInvite: (token) =>
     api.post(`/invites/${token}/accept`),
-};
-
-//
-// Collective Expense API
-//
-
-export const collectiveExpenseService = {
-  create: (groupId, data) =>
-    api.post(`/groups/${groupId}/collective-expenses`, data),
-
-  getAll: (groupId) =>
-    api.get(`/groups/${groupId}/collective-expenses`),
-
-  getById: (groupId, id) =>
-    api.get(`/groups/${groupId}/collective-expenses/${id}`),
-
-  update: (groupId, id, data) =>
-    api.put(`/groups/${groupId}/collective-expenses/${id}`, data),
-
-  remove: (groupId, id) =>
-    api.delete(`/groups/${groupId}/collective-expenses/${id}`),
-
-  unlock: (groupId, id) =>
-    api.post(`/groups/${groupId}/collective-expenses/${id}/unlock`),
-};
-
-//
-// Individual Item API
-//
-
-export const individualItemService = {
-  add: (groupId, collectiveExpenseId, data) =>
-    api.post(
-      `/groups/${groupId}/collective-expenses/${collectiveExpenseId}/items`,
-      data
-    ),
-
-  update: (groupId, collectiveExpenseId, itemId, data) =>
-    api.put(
-      `/groups/${groupId}/collective-expenses/${collectiveExpenseId}/items/${itemId}`,
-      data
-    ),
-
-  delete: (groupId, collectiveExpenseId, itemId) =>
-    api.delete(
-      `/groups/${groupId}/collective-expenses/${collectiveExpenseId}/items/${itemId}`
-    ),
 };
 
 export default api;

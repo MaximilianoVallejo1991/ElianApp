@@ -19,14 +19,13 @@ import {
 import {
   groupService,
   balanceService,
-  collectiveExpenseService,
+  expenseService,
 } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import ExpenseForm from '../components/ExpenseForm';
 import PaymentForm from '../components/PaymentForm';
 import InviteModal from '../components/InviteModal';
-import CollectiveExpenseForm from '../components/CollectiveExpenseForm';
-import IndividualItemForm from '../components/IndividualItemForm';
+import ItemReportForm from '../components/ItemReportForm';
 
 const BALANCE_MODE_LABELS = {
   DYNAMIC: 'Dynamic',
@@ -70,7 +69,6 @@ export default function GroupDetailPage() {
 
   const [group, setGroup] = useState(null);
   const [balances, setBalances] = useState([]);
-  const [collectiveExpenses, setCollectiveExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -78,31 +76,20 @@ export default function GroupDetailPage() {
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
-  const [showCollectiveForm, setShowCollectiveForm] = useState(false);
 
-  // Individual item form state — which expense is being reported on
-  const [showItemFormFor, setShowItemFormFor] = useState(null);
-  // Which expense the user is editing their existing item for
-  const [editingItemFor, setEditingItemFor] = useState(null);
+  // Item reporting modal state for COLLECTIVE expenses
+  const [showItemModalFor, setShowItemModalFor] = useState(null);
 
   const loadGroup = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const [groupResponse, balanceResponse, collectiveResponse] =
-        await Promise.all([
-          groupService.getById(id),
-          balanceService.getBalances(id),
-          collectiveExpenseService.getAll(id),
-        ]);
+      const [groupResponse, balanceResponse] = await Promise.all([
+        groupService.getById(id),
+        balanceService.getBalances(id),
+      ]);
       setGroup(groupResponse.data);
       setBalances(balanceResponse.data);
-      const ceData = Array.isArray(collectiveResponse.data)
-        ? collectiveResponse.data
-        : collectiveResponse.data?.collectiveExpenses ||
-          collectiveResponse.data?.data ||
-          [];
-      setCollectiveExpenses(ceData);
     } catch (err) {
       if (err.status === 404) {
         setError('Group not found.');
@@ -177,7 +164,7 @@ export default function GroupDetailPage() {
     return userId || 'Unknown';
   }
 
-  /** Render a status badge for a collective expense. */
+  /** Render a status badge for an expense. */
   function renderStatusBadge(expense) {
     const status = expense.status;
 
@@ -279,14 +266,6 @@ export default function GroupDetailPage() {
               >
                 <PlusIcon className="h-5 w-5" aria-hidden="true" />
                 Add expense
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowCollectiveForm(true)}
-                className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-secondary bg-white px-5 py-3 font-heading text-sm font-semibold text-secondary transition-all duration-200 hover:bg-secondary/5 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2 sm:w-auto"
-              >
-                <UserGroupIcon className="h-5 w-5" aria-hidden="true" />
-                Collective expense
               </button>
               <button
                 type="button"
@@ -433,201 +412,111 @@ export default function GroupDetailPage() {
             </div>
           ) : (
             <div className="mt-4 space-y-3">
-              {expenses.map((expense) => (
-                <div
-                  key={expense.id}
-                  className="rounded-xl border border-border bg-white p-5 shadow-sm transition-shadow duration-200 hover:shadow-md"
-                >
-                  {/* Top row: description + amount */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h3 className="font-heading text-base font-semibold text-text truncate">
-                        {expense.description || 'Untitled expense'}
-                      </h3>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
-                        <span
-                          className={`inline-block rounded-full px-2 py-0.5 font-medium ${CATEGORY_STYLES[expense.category] || CATEGORY_STYLES.OTHER}`}
-                        >
-                          {expense.category
-                            ? expense.category.charAt(0) + expense.category.slice(1).toLowerCase()
-                            : 'Other'}
-                        </span>
-                        <span className="text-text-muted">
-                          paid by{' '}
-                          <span className="font-semibold text-text">
-                            {expense.payer?.nickName || expense.payer?.email || 'Unknown'}
-                          </span>
-                        </span>
-                        <span className="text-text-muted">·</span>
-                        <span className="text-text-muted">{formatDate(expense.date || expense.createdAt)}</span>
-                      </div>
-                    </div>
-                    <span className="flex-shrink-0 font-heading text-lg font-bold text-primary">
-                      {formatCurrency(expense.amount, currency)}
-                    </span>
-                  </div>
-
-                  {/* Split breakdown */}
-                  {expense.splits && expense.splits.length > 0 && (
-                    <div className="mt-3 border-t border-border pt-3">
-                      <p className="mb-1.5 text-xs font-medium text-text-muted uppercase tracking-wider">
-                        Split {expense.splitType === 'EQUAL' ? 'equally' : expense.splitType === 'PERCENTAGE' ? 'by percentage' : 'by exact amount'}
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {expense.splits.map((split) => (
-                          <span
-                            key={split.id || split.userId}
-                            className="inline-flex items-center gap-1 rounded-md bg-secondary/5 px-2.5 py-1 text-xs text-text"
-                          >
-                            <span className="font-medium">
-                              {split.user?.nickName || split.user?.email || split.userId}
-                            </span>
-                            <span className="font-semibold text-secondary">
-                              {formatCurrency(split.amount, currency)}
-                            </span>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* ---- Collective Expenses section ---- */}
-        <section className="mt-12">
-          <div className="flex items-center justify-between">
-            <h2 className="font-heading text-xl font-bold text-primary">
-              Collective expenses
-            </h2>
-            <button
-              type="button"
-              onClick={() => setShowCollectiveForm(true)}
-              className="inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium text-secondary transition-colors duration-200 hover:text-secondary/80 focus:outline-none focus:ring-2 focus:ring-secondary/30 rounded-lg px-2 py-1"
-            >
-              <PlusIcon className="h-4 w-4" aria-hidden="true" />
-              New
-            </button>
-          </div>
-
-          {collectiveExpenses.length === 0 ? (
-            <div className="mt-4 rounded-xl border border-border bg-white px-5 py-6 text-center">
-              <UserGroupIcon
-                className="mx-auto h-8 w-8 text-text-muted/40"
-                aria-hidden="true"
-              />
-              <p className="mt-2 text-sm text-text-muted">
-                No collective expenses yet. Create one to split costs with
-                shared expenses.
-              </p>
-            </div>
-          ) : (
-            <div className="mt-4 space-y-4">
-              {collectiveExpenses.map((ce) => {
-                const ceItems = ce.items || [];
-                const userItem = ceItems.find(
-                  (it) => it.userId === currentUserId
-                );
+              {expenses.map((expense) => {
+                const isCollective = expense.splitType === 'COLLECTIVE';
+                const expenseItems = expense.items || [];
+                const userItem = expenseItems.find((it) => it.userId === currentUserId);
                 const hasReported = !!userItem;
-                const isParticipant = (ce.participantIds || []).includes(
-                  currentUserId
-                );
-                const isCreator = ce.creatorId === currentUserId;
-                const isPending = ce.status === 'PENDING';
-                const isLocked = ce.isLocked === true;
+                const isParticipant = (expense.participantIds || []).includes(currentUserId);
+                const isCreator = expense.payerId === currentUserId || expense.createdById === currentUserId;
+                const isPending = expense.status === 'PENDING';
+                const isMismatch = expense.status === 'MISMATCH';
+                const isLocked = expense.isLocked === true;
 
                 // Which participants haven't reported yet
-                const unreportedIds = (ce.participantIds || []).filter(
-                  (pid) => !ceItems.some((it) => it.userId === pid)
+                const unreportedIds = (expense.participantIds || []).filter(
+                  (pid) => !expenseItems.some((it) => it.userId === pid)
                 );
-
-                // Is the current user showing their item form or edit form
-                const showAddForm =
-                  showItemFormFor === ce.id;
-                const showEditForm =
-                  editingItemFor === ce.id;
 
                 return (
                   <div
-                    key={ce.id}
+                    key={expense.id}
                     className="rounded-xl border border-border bg-white p-5 shadow-sm transition-shadow duration-200 hover:shadow-md"
                   >
-                    {/* Top row: description + status + total */}
-                    <div className="flex items-start justify-between gap-3 mb-3">
+                    {/* Top row: description + amount + status badge */}
+                    <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="font-heading text-base font-semibold text-text truncate">
-                            {ce.description || 'Collective expense'}
+                            {expense.description || 'Untitled expense'}
                           </h3>
-                          {renderStatusBadge(ce)}
+                          {isCollective && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-secondary/10 px-2 py-0.5 text-xs font-semibold text-secondary">
+                              <UserGroupIcon className="h-3 w-3" aria-hidden="true" />
+                              Collective
+                            </span>
+                          )}
+                          {renderStatusBadge(expense)}
                           {isLocked && (
                             <span className="inline-flex items-center gap-1 rounded-full bg-border/50 px-2 py-0.5 text-xs text-text-muted">
-                              <LockClosedIcon
-                                className="h-3 w-3"
-                                aria-hidden="true"
-                              />
+                              <LockClosedIcon className="h-3 w-3" aria-hidden="true" />
                               Locked
                             </span>
                           )}
                         </div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
+                          <span
+                            className={`inline-block rounded-full px-2 py-0.5 font-medium ${CATEGORY_STYLES[expense.category] || CATEGORY_STYLES.OTHER}`}
+                          >
+                            {expense.category
+                              ? expense.category.charAt(0) + expense.category.slice(1).toLowerCase()
+                              : 'Other'}
+                          </span>
+                          <span className="text-text-muted">
+                            paid by{' '}
+                            <span className="font-semibold text-text">
+                              {expense.payer?.nickName || expense.payer?.email || 'Unknown'}
+                            </span>
+                          </span>
+                          <span className="text-text-muted">·</span>
+                          <span className="text-text-muted">{formatDate(expense.date || expense.createdAt)}</span>
+                        </div>
                       </div>
                       <span className="flex-shrink-0 font-heading text-lg font-bold text-primary">
-                        {formatCurrency(ce.total, currency)}
+                        {formatCurrency(expense.amount, currency)}
                       </span>
                     </div>
 
-                    {/* Meta info */}
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-muted mb-3">
-                      <span>
-                        Shared costs:{' '}
-                        <span className="font-semibold text-text">
-                          {formatCurrency(ce.sharedCosts, currency)}
+                    {/* COLLECTIVE: Meta info */}
+                    {isCollective && (
+                      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-muted">
+                        <span>
+                          Shared costs:{' '}
+                          <span className="font-semibold text-text">
+                            {formatCurrency(expense.sharedCosts, currency)}
+                          </span>
                         </span>
-                      </span>
-                      <span>
-                        {ceItems.length}/{ce.participantIds?.length || 0}{' '}
-                        reported
-                      </span>
-                      <span>
-                        Created by{' '}
-                        <span className="font-semibold text-text">
-                          {memberNameByUserId(ce.creatorId)}
+                        <span>
+                          {expenseItems.length}/{expense.participantIds?.length || 0}{' '}
+                          reported
                         </span>
-                      </span>
-                    </div>
+                      </div>
+                    )}
 
-                    {/* Unlock button for creator */}
-                    {isCreator && isLocked && (
-                      <div className="mb-3">
+                    {/* COLLECTIVE: Unlock button for creator */}
+                    {isCollective && isCreator && isLocked && (
+                      <div className="mt-3">
                         <button
                           type="button"
                           onClick={async () => {
                             try {
-                              await collectiveExpenseService.unlock(
-                                id,
-                                ce.id
-                              );
+                              await expenseService.unlockExpense(id, expense.id);
                               loadGroup();
                             } catch {
-                              // Silently ignore — error handling at top level
+                              // Silently ignore
                             }
                           }}
                           className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-cta bg-cta/5 px-3 py-1.5 text-xs font-semibold text-cta transition-all duration-200 hover:bg-cta/10 focus:outline-none focus:ring-2 focus:ring-cta/30"
                         >
-                          <LockOpenIcon
-                            className="h-3.5 w-3.5"
-                            aria-hidden="true"
-                          />
+                          <LockOpenIcon className="h-3.5 w-3.5" aria-hidden="true" />
                           Unlock for editing
                         </button>
                       </div>
                     )}
 
-                    {/* PENDING: show unreported participants + add form */}
-                    {isPending && !isLocked && (
-                      <div className="mb-3">
+                    {/* COLLECTIVE: PENDING status - show unreported + add item form */}
+                    {isCollective && isPending && !isLocked && (
+                      <div className="mt-3">
                         {unreportedIds.length > 0 && (
                           <p className="mb-2 text-xs text-text-muted">
                             Waiting for:{' '}
@@ -637,125 +526,113 @@ export default function GroupDetailPage() {
                           </p>
                         )}
 
-                        {/* Show add form if user is participant and hasn't reported */}
-                        {isParticipant && !hasReported && !showAddForm && (
+                        {/* Show add item form if user is participant and hasn't reported */}
+                        {isParticipant && !hasReported && showItemModalFor !== expense.id && (
                           <button
                             type="button"
-                            onClick={() => {
-                              setShowItemFormFor(ce.id);
-                              setEditingItemFor(null);
-                            }}
+                            onClick={() => setShowItemModalFor(expense.id)}
                             className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-secondary px-3.5 py-2 text-xs font-semibold text-white transition-all duration-200 hover:bg-secondary/90 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-1"
                           >
-                            <PlusIcon
-                              className="h-3.5 w-3.5"
-                              aria-hidden="true"
-                            />
+                            <PlusIcon className="h-3.5 w-3.5" aria-hidden="true" />
                             Report my item
                           </button>
                         )}
-
-                        {isParticipant && !hasReported && showAddForm && (
-                          <IndividualItemForm
-                            groupId={id}
-                            collectiveExpenseId={ce.id}
-                            existingItem={null}
-                            currency={currency}
-                            onSuccess={() => {
-                              setShowItemFormFor(null);
-                              loadGroup();
-                            }}
-                            onCancel={() => setShowItemFormFor(null)}
-                          />
-                        )}
                       </div>
                     )}
 
-                    {/* Locked notice for PENDING participants without item */}
-                    {isPending && isLocked && isParticipant && !hasReported && (
-                      <div className="mb-3 rounded-md bg-cta/5 px-3 py-2 text-xs text-cta">
-                        This expense is locked. The creator must unlock it
-                        before you can report.
+                    {/* COLLECTIVE: Item reporting inline form */}
+                    {isCollective && showItemModalFor === expense.id && (
+                      <div className="mt-3 rounded-lg border border-border bg-background p-4">
+                        <p className="mb-3 text-xs font-semibold text-text">
+                          {userItem ? 'Edit your item' : 'Report your item'}
+                        </p>
+                        <ItemReportForm
+                          groupId={id}
+                          expenseId={expense.id}
+                          existingItem={userItem}
+                          currency={currency}
+                          onSuccess={() => {
+                            setShowItemModalFor(null);
+                            loadGroup();
+                          }}
+                          onCancel={() => setShowItemModalFor(null)}
+                          onDelete={() => {
+                            setShowItemModalFor(null);
+                            loadGroup();
+                          }}
+                        />
                       </div>
                     )}
 
-                    {/* Reported items list */}
-                    {ceItems.length > 0 && (
-                      <div className="border-t border-border pt-3">
+                    {/* COLLECTIVE: Locked notice for PENDING participants without item */}
+                    {isCollective && isPending && isLocked && isParticipant && !hasReported && (
+                      <div className="mt-3 rounded-md bg-cta/5 px-3 py-2 text-xs text-cta">
+                        This expense is locked. The creator must unlock it before you can report.
+                      </div>
+                    )}
+
+                    {/* COLLECTIVE: Reported items list */}
+                    {isCollective && expenseItems.length > 0 && (
+                      <div className="mt-3 border-t border-border pt-3">
                         <p className="mb-2 text-xs font-medium text-text-muted uppercase tracking-wider">
                           Reported items
                         </p>
                         <ul className="space-y-2">
-                          {ceItems.map((item) => {
-                            const isCurrentUserItem =
-                              item.userId === currentUserId;
-                            const showEdit =
-                              isCurrentUserItem && showEditForm;
-                            const showReadOnly =
-                              !isCurrentUserItem || !showEditForm;
-
-                            return (
-                              <li key={item.id}>
-                                {showReadOnly && (
-                                  <div className="flex items-center justify-between rounded-lg bg-background px-3 py-2">
-                                    <div className="min-w-0 flex-1">
-                                      <span className="text-sm font-medium text-text">
-                                        {memberNameByUserId(item.userId)}
-                                      </span>
-                                      {item.description && (
-                                        <span className="ml-2 text-xs text-text-muted">
-                                          — {item.description}
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-2 flex-shrink-0">
-                                      <span className="font-heading text-sm font-bold text-primary">
-                                        {formatCurrency(
-                                          item.amount,
-                                          currency
-                                        )}
-                                      </span>
-                                      {isCurrentUserItem &&
-                                        !isLocked &&
-                                        !showEdit && (
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              setEditingItemFor(ce.id);
-                                              setShowItemFormFor(null);
-                                            }}
-                                            className="cursor-pointer text-xs text-secondary transition-colors duration-200 hover:text-secondary/80 focus:outline-none focus:ring-2 focus:ring-secondary/30 rounded px-1 py-0.5"
-                                          >
-                                            Edit
-                                          </button>
-                                        )}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {showEdit && (
-                                  <IndividualItemForm
-                                    groupId={id}
-                                    collectiveExpenseId={ce.id}
-                                    existingItem={userItem}
-                                    currency={currency}
-                                    onSuccess={() => {
-                                      setEditingItemFor(null);
-                                      loadGroup();
-                                    }}
-                                    onCancel={() =>
-                                      setEditingItemFor(null)
-                                    }
-                                    onDelete={() => {
-                                      setEditingItemFor(null);
-                                      loadGroup();
-                                    }}
-                                  />
-                                )}
-                              </li>
-                            );
-                          })}
+                          {expenseItems.map((item) => (
+                            <li key={item.id}>
+                              <div className="flex items-center justify-between rounded-lg bg-background px-3 py-2">
+                                <div className="min-w-0 flex-1">
+                                  <span className="text-sm font-medium text-text">
+                                    {memberNameByUserId(item.userId)}
+                                  </span>
+                                  {item.description && item.description !== 'mi gasto' && (
+                                    <span className="ml-2 text-xs text-text-muted">
+                                      — {item.description}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                  <span className="font-heading text-sm font-bold text-primary">
+                                    {formatCurrency(item.amount, currency)}
+                                  </span>
+                                  {item.userId === currentUserId && !isLocked && showItemModalFor !== expense.id && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowItemModalFor(expense.id)}
+                                      className="cursor-pointer text-xs text-secondary transition-colors duration-200 hover:text-secondary/80 focus:outline-none focus:ring-2 focus:ring-secondary/30 rounded px-1 py-0.5"
+                                    >
+                                      Edit
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </li>
+                          ))}
                         </ul>
+                      </div>
+                    )}
+
+                    {/* Non-COLLECTIVE: Split breakdown */}
+                    {!isCollective && expense.splits && expense.splits.length > 0 && (
+                      <div className="mt-3 border-t border-border pt-3">
+                        <p className="mb-1.5 text-xs font-medium text-text-muted uppercase tracking-wider">
+                          Split {expense.splitType === 'EQUAL' ? 'equally' : expense.splitType === 'PERCENTAGE' ? 'by percentage' : 'by exact amount'}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {expense.splits.map((split) => (
+                            <span
+                              key={split.id || split.userId}
+                              className="inline-flex items-center gap-1 rounded-md bg-secondary/5 px-2.5 py-1 text-xs text-text"
+                            >
+                              <span className="font-medium">
+                                {split.user?.nickName || split.user?.email || split.userId}
+                              </span>
+                              <span className="font-semibold text-secondary">
+                                {formatCurrency(split.amount, currency)}
+                              </span>
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -855,16 +732,8 @@ export default function GroupDetailPage() {
           onClose={() => setShowInviteModal(false)}
         />
       )}
-
-      {showCollectiveForm && (
-        <CollectiveExpenseForm
-          groupId={id}
-          members={members}
-          currency={currency}
-          onSuccess={loadGroup}
-          onClose={() => setShowCollectiveForm(false)}
-        />
-      )}
     </div>
   );
 }
+
+      

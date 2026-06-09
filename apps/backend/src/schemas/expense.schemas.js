@@ -14,6 +14,9 @@ import { AppError } from '../utils/errors.js';
  * Required: amount (positive), description (non-empty), category (enum),
  *           payerId (CUID), splitType (enum), splits (array)
  *
+ * For COLLECTIVE: splits not required, but sharedCosts and participantIds required.
+ * For non-COLLECTIVE: splits required, sharedCosts/participantIds not used.
+ *
  * Splits structure is validated but sums are NOT checked here —
  * that is done by `validateSplits()` in the service layer.
  */
@@ -26,11 +29,12 @@ export const createExpenseSchema = z.object({
     }),
   }),
   payerId: z.string().min(1, 'Payer ID is required'),
-  splitType: z.enum(['EQUAL', 'EXACT', 'PERCENTAGE'], {
+  splitType: z.enum(['EQUAL', 'EXACT', 'PERCENTAGE', 'COLLECTIVE'], {
     errorMap: () => ({
-      message: 'Split type must be EQUAL, EXACT, or PERCENTAGE',
+      message: 'Split type must be EQUAL, EXACT, PERCENTAGE, or COLLECTIVE',
     }),
   }),
+  // Splits required for EQUAL, EXACT, PERCENTAGE; not used for COLLECTIVE
   splits: z
     .array(
       z.object({
@@ -39,15 +43,40 @@ export const createExpenseSchema = z.object({
         percentage: z.number().optional(),
       }),
     )
-    .min(1, 'At least one split entry is required'),
+    .optional(),
+  // COLLECTIVE-specific fields
+  sharedCosts: z.number().min(0, 'Shared costs must be non-negative').optional(),
+  participantIds: z.array(z.string()).optional(),
 });
 
 /**
  * PUT /groups/:groupId/expenses/:id
  *
  * All fields optional (partial update).
+ * For COLLECTIVE: sharedCosts and participantIds can be updated while PENDING.
  */
 export const updateExpenseSchema = createExpenseSchema.partial();
+
+/**
+ * POST /groups/:groupId/expenses/:id/items
+ *
+ * Required: amount (can be 0)
+ * Optional: description (defaults to "mi gasto")
+ */
+export const createItemSchema = z.object({
+  amount: z.number().min(0, 'Amount must be non-negative'),
+  description: z.string().optional(),
+});
+
+/**
+ * PATCH /groups/:groupId/expenses/:id/items/:itemId
+ *
+ * All fields optional (partial update).
+ */
+export const updateItemSchema = z.object({
+  amount: z.number().min(0, 'Amount must be non-negative').optional(),
+  description: z.string().optional(),
+});
 
 /**
  * POST /groups/:groupId/payments
@@ -79,7 +108,7 @@ export const createPaymentSchema = z.object({
  * @throws {AppError} INVALID_SPLITS
  */
 export function validateSplits(totalAmount, splitType, splits) {
-  const epsilon = 0.001; // tolerance for floating-point rounding
+  const epsilon = 0.01; // tolerance for floating-point rounding
 
   if (splitType === 'EXACT') {
     const sum = splits.reduce((acc, s) => acc + (s.amount || 0), 0);

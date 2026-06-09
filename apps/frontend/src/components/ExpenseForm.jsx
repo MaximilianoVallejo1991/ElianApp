@@ -12,6 +12,7 @@ const SPLIT_TYPES = [
   { value: 'EQUAL', label: 'Equal' },
   { value: 'EXACT', label: 'Exact amounts' },
   { value: 'PERCENTAGE', label: 'Percentages' },
+  { value: 'COLLECTIVE', label: 'Collective' },
 ];
 
 const INITIAL_SPLIT = { userId: '', amount: '', percentage: '' };
@@ -45,6 +46,18 @@ export default function ExpenseForm({
   const [error, setError] = useState('');
 
   // ------------------------------------------------------------------
+  // COLLECTIVE wizard state
+  // ------------------------------------------------------------------
+  const [collectiveStep, setCollectiveStep] = useState(1);
+  const [sharedCosts, setSharedCosts] = useState('');
+  const [selectedParticipantIds, setSelectedParticipantIds] = useState(
+    members.map((m) => m.userId)
+  );
+  const [collectiveItems, setCollectiveItems] = useState({}); // { userId: { amount, description } }
+  const [collectiveLoading, setCollectiveLoading] = useState(false);
+  const [collectiveError, setCollectiveError] = useState('');
+
+  // ------------------------------------------------------------------
   // Derived data
   // ------------------------------------------------------------------
 
@@ -70,6 +83,33 @@ export default function ExpenseForm({
     );
   }, [splitType, members]);
 
+  // Reset collective wizard when switching to COLLECTIVE or changing members
+  useEffect(() => {
+    if (splitType === 'COLLECTIVE') {
+      setCollectiveStep(1);
+      setSharedCosts('');
+      setSelectedParticipantIds(members.map((m) => m.userId));
+      setCollectiveItems({});
+      setCollectiveError('');
+    }
+  }, [splitType, members]);
+
+  // Initialize items for step 4 when entering that step
+  useEffect(() => {
+    if (collectiveStep === 4 && splitType === 'COLLECTIVE') {
+      // Pre-populate items with existing values or defaults
+      const initialized = {};
+      selectedParticipantIds.forEach((uid) => {
+        if (collectiveItems[uid]) {
+          initialized[uid] = collectiveItems[uid];
+        } else {
+          initialized[uid] = { amount: '', description: '' };
+        }
+      });
+      setCollectiveItems(initialized);
+    }
+  }, [collectiveStep, splitType]);
+
   // ------------------------------------------------------------------
   // Split input handlers
   // ------------------------------------------------------------------
@@ -80,6 +120,149 @@ export default function ExpenseForm({
       next[index] = { ...next[index], [field]: value };
       return next;
     });
+  };
+
+  // ------------------------------------------------------------------
+  // Collective wizard handlers
+  // ------------------------------------------------------------------
+
+  const toggleCollectiveParticipant = (userId) => {
+    setSelectedParticipantIds((prev) =>
+      prev.includes(userId)
+        ? prev.filter((id) => id !== userId)
+        : [...prev, userId]
+    );
+  };
+
+  const toggleAllCollectiveParticipants = () => {
+    if (selectedParticipantIds.length === members.length) {
+      setSelectedParticipantIds([]);
+    } else {
+      setSelectedParticipantIds(members.map((m) => m.userId));
+    }
+  };
+
+  const updateCollectiveItem = (userId, field, value) => {
+    setCollectiveItems((prev) => ({
+      ...prev,
+      [userId]: { ...prev[userId], [field]: value },
+    }));
+  };
+
+  // Compute collective status for real-time display
+  const collectiveStatus = useMemo(() => {
+    const total = parseFloat(amount) || 0;
+    const shared = parseFloat(sharedCosts) || 0;
+    const itemsSum = Object.values(collectiveItems).reduce(
+      (sum, item) => sum + (parseFloat(item.amount) || 0),
+      0
+    );
+    const discrepancy = Math.abs(itemsSum + shared - total);
+    const isMatch = discrepancy <= 0.01;
+    return {
+      itemsSum,
+      shared,
+      total,
+      discrepancy,
+      isMatch,
+      hasAllItems: selectedParticipantIds.every(
+        (uid) => collectiveItems[uid]?.amount && parseFloat(collectiveItems[uid].amount) > 0
+      ),
+    };
+  }, [amount, sharedCosts, collectiveItems, selectedParticipantIds]);
+
+  const validateCollectiveStep = () => {
+    const total = parseFloat(amount) || 0;
+    const shared = parseFloat(sharedCosts) || 0;
+
+    if (collectiveStep === 1) {
+      if (!description.trim()) return 'Description is required.';
+      if (!amount || total <= 0) return 'Total must be a positive number.';
+      return null;
+    }
+
+    if (collectiveStep === 2) {
+      if (shared < 0) return 'Shared costs cannot be negative.';
+      if (shared > total) return 'Shared costs cannot exceed the total.';
+      return null;
+    }
+
+    if (collectiveStep === 3) {
+      if (selectedParticipantIds.length === 0) return 'Select at least one participant.';
+      return null;
+    }
+
+    if (collectiveStep === 4) {
+      if (!collectiveStatus.hasAllItems) return 'All participants must report their item amount.';
+      if (!collectiveStatus.isMatch) return 'Items sum + shared costs must equal the total.';
+      return null;
+    }
+
+    return null;
+  };
+
+  const handleCollectiveNext = () => {
+    const validationError = validateCollectiveStep();
+    if (validationError) {
+      setCollectiveError(validationError);
+      return;
+    }
+    setCollectiveError('');
+    setCollectiveStep((prev) => Math.min(prev + 1, 4));
+  };
+
+  const handleCollectiveBack = () => {
+    setCollectiveError('');
+    setCollectiveStep((prev) => Math.max(prev - 1, 1));
+  };
+
+  const handleCollectiveSubmit = async (e) => {
+    e.preventDefault();
+    const validationError = validateCollectiveStep();
+    if (validationError) {
+      setCollectiveError(validationError);
+      return;
+    }
+
+    setCollectiveLoading(true);
+    setCollectiveError('');
+
+    try {
+      const payload = {
+        amount: parseFloat(amount),
+        description: description.trim(),
+        category,
+        payerId: currentUserId,
+        splitType: 'COLLECTIVE',
+        sharedCosts: parseFloat(sharedCosts) || 0,
+        participantIds: selectedParticipantIds,
+      };
+
+      const result = await expenseService.create(groupId, payload);
+      const expenseId = result.data?.id;
+
+      // Report items for each participant
+      await Promise.all(
+        selectedParticipantIds.map((uid) => {
+          const item = collectiveItems[uid];
+          if (item && item.amount) {
+            return expenseService.reportItem(groupId, expenseId, {
+              userId: uid,
+              amount: parseFloat(item.amount),
+              description: item.description || 'mi gasto',
+            });
+          }
+          return Promise.resolve();
+        })
+      );
+
+      setCollectiveLoading(false);
+      onSuccess?.();
+      onClose?.();
+    } catch (err) {
+      setCollectiveError(err.message || 'Failed to create expense.');
+      setCollectiveLoading(false);
+    }
   };
 
   /** Sum of exact split amounts (client-side preview only). */
@@ -418,31 +601,336 @@ export default function ExpenseForm({
             </div>
           )}
 
-          {/* Buttons */}
-          <div className="flex gap-3 pt-3 border-t border-border">
+          {/* --- COLLECTIVE WIZARD --- */}
+          {splitType === 'COLLECTIVE' && (
+            <div className="space-y-4">
+              {/* Step indicator */}
+              <div className="flex items-center gap-2">
+                {[1, 2, 3, 4].map((step) => (
+                  <div key={step} className="flex items-center gap-2">
+                    <div
+                      className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
+                        collectiveStep >= step
+                          ? 'bg-secondary text-white'
+                          : 'bg-border text-text-muted'
+                      }`}
+                    >
+                      {step}
+                    </div>
+                    {step < 4 && (
+                      <div
+                        className={`h-1 w-8 rounded ${
+                          collectiveStep > step ? 'bg-secondary' : 'bg-border'
+                        }`}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Step 1: Basic info */}
+              {collectiveStep === 1 && (
+                <div className="space-y-4 rounded-lg border border-border bg-background p-4">
+                  <p className="text-sm font-semibold text-text">Step 1: Basic info</p>
+                  <div>
+                    <label htmlFor="collective-description" className="mb-1.5 block text-xs font-semibold text-text">
+                      Description <span className="font-normal text-text-muted">(optional)</span>
+                    </label>
+                    <input
+                      id="collective-description"
+                      type="text"
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="Team dinner, office supplies, etc."
+                      className="w-full rounded-lg border border-border bg-white px-4 py-2.5 text-sm text-text transition-colors duration-200 placeholder:text-text-muted/50 focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary/20"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="collective-amount" className="mb-1.5 block text-xs font-semibold text-text">
+                      Total amount
+                    </label>
+                    <div className="relative">
+                      <CurrencyDollarIcon
+                        className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-text-muted"
+                        aria-hidden="true"
+                      />
+                      <input
+                        id="collective-amount"
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full rounded-lg border border-border bg-white py-2.5 pl-10 pr-16 text-sm text-text transition-colors duration-200 placeholder:text-text-muted/50 focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary/20"
+                      />
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-text-muted">
+                        {currency}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 2: Shared costs */}
+              {collectiveStep === 2 && (
+                <div className="space-y-4 rounded-lg border border-border bg-background p-4">
+                  <p className="text-sm font-semibold text-text">Step 2: Shared costs</p>
+                  <p className="text-xs text-text-muted">
+                    Costs shared equally among all participants (delivery, tips, taxes, etc.). Can be 0.
+                  </p>
+                  <div className="relative">
+                    <CurrencyDollarIcon
+                      className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-text-muted"
+                      aria-hidden="true"
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={sharedCosts}
+                      onChange={(e) => setSharedCosts(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full rounded-lg border border-border bg-white py-2.5 pl-10 pr-16 text-sm text-text transition-colors duration-200 placeholder:text-text-muted/50 focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary/20"
+                    />
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-text-muted">
+                      {currency}
+                    </span>
+                  </div>
+                  {parseFloat(sharedCosts) > 0 && selectedParticipantIds.length > 0 && (
+                    <div className="rounded-md bg-secondary/5 px-3 py-2">
+                      <p className="text-xs text-text">
+                        <span className="font-semibold text-secondary">
+                          {formatCurrency(Math.round((parseFloat(sharedCosts) / selectedParticipantIds.length) * 100) / 100)}
+                        </span>{' '}
+                        per person
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Step 3: Participants */}
+              {collectiveStep === 3 && (
+                <div className="space-y-4 rounded-lg border border-border bg-background p-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-text">Step 3: Participants</p>
+                    <button
+                      type="button"
+                      onClick={toggleAllCollectiveParticipants}
+                      className="cursor-pointer text-xs font-medium text-secondary transition-colors duration-200 hover:text-secondary/80 focus:outline-none focus:ring-2 focus:ring-secondary/30 rounded px-1.5 py-0.5"
+                    >
+                      {selectedParticipantIds.length === members.length ? 'Deselect all' : 'Select all'}
+                    </button>
+                  </div>
+                  <div className="max-h-48 space-y-1 overflow-y-auto">
+                    {members.map((m) => {
+                      const checked = selectedParticipantIds.includes(m.userId);
+                      return (
+                        <label
+                          key={m.userId}
+                          className={`flex cursor-pointer items-center gap-3 rounded-md px-3 py-2.5 transition-colors duration-150 ${
+                            checked ? 'bg-secondary/5' : 'hover:bg-border/30'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleCollectiveParticipant(m.userId)}
+                            className="h-4 w-4 cursor-pointer rounded border-border text-secondary focus:ring-2 focus:ring-secondary/20"
+                          />
+                          <span className="truncate text-sm font-medium text-text">
+                            {memberName(m)}
+                            {m.userId === currentUserId ? ' (you)' : ''}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {selectedParticipantIds.length > 0 && (
+                    <p className="text-xs text-text-muted">
+                      {selectedParticipantIds.length} participant{selectedParticipantIds.length !== 1 ? 's' : ''} selected
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Step 4: Item reporting */}
+              {collectiveStep === 4 && (
+                <div className="space-y-4 rounded-lg border border-border bg-background p-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-text">Step 4: Report items</p>
+                    {/* Status indicator */}
+                    <div
+                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
+                        collectiveStatus.isMatch
+                          ? 'bg-success/10 text-success'
+                          : 'bg-error/10 text-error'
+                      }`}
+                    >
+                      {collectiveStatus.isMatch ? (
+                        <>
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          Match
+                        </>
+                      ) : (
+                        <>
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          Mismatch
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Running totals */}
+                  <div className="flex flex-wrap items-center gap-3 rounded-md bg-white px-3 py-2 text-xs">
+                    <span className="text-text-muted">
+                      Items sum: <span className="font-semibold text-text">{formatCurrency(collectiveStatus.itemsSum)}</span>
+                    </span>
+                    <span className="text-text-muted">+</span>
+                    <span className="text-text-muted">
+                      Shared: <span className="font-semibold text-text">{formatCurrency(collectiveStatus.shared)}</span>
+                    </span>
+                    <span className="text-text-muted">=</span>
+                    <span className="font-semibold text-text">{formatCurrency(collectiveStatus.itemsSum + collectiveStatus.shared)}</span>
+                    <span className="text-text-muted">/</span>
+                    <span className="font-semibold text-primary">{formatCurrency(collectiveStatus.total)}</span>
+                    {collectiveStatus.discrepancy > 0.01 && (
+                      <span className="text-error">
+                        (Δ {formatCurrency(collectiveStatus.discrepancy)})
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Items table */}
+                  <div className="space-y-2">
+                    {selectedParticipantIds.map((uid) => {
+                      const member = members.find((m) => m.userId === uid);
+                      const item = collectiveItems[uid] || { amount: '', description: '' };
+                      return (
+                        <div key={uid} className="flex items-center gap-3">
+                          <div className="flex min-w-0 flex-1 items-center gap-2">
+                            <UserIcon className="h-4 w-4 flex-shrink-0 text-text-muted" aria-hidden="true" />
+                            <span className="truncate text-sm text-text">
+                              {memberName(member)}
+                              {uid === currentUserId ? ' (you)' : ''}
+                            </span>
+                          </div>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="0.00"
+                            value={item.amount}
+                            onChange={(e) => updateCollectiveItem(uid, 'amount', e.target.value)}
+                            className="w-24 flex-shrink-0 rounded-lg border border-border bg-white px-3 py-2 text-right text-sm text-text transition-colors duration-200 placeholder:text-text-muted/50 focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary/20"
+                          />
+                          <input
+                            type="text"
+                            placeholder="mi gasto"
+                            value={item.description}
+                            onChange={(e) => updateCollectiveItem(uid, 'description', e.target.value)}
+                            className="w-28 flex-shrink-0 rounded-lg border border-border bg-white px-3 py-2 text-sm text-text transition-colors duration-200 placeholder:text-text-muted/50 focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary/20"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Error for collective wizard */}
+              {collectiveError && (
+                <div className="rounded-lg border border-error/30 bg-error/5 px-4 py-3 text-sm text-error" role="alert">
+                  {collectiveError}
+                </div>
+              )}
+
+              {/* Wizard navigation */}
+              <div className="flex gap-3">
+                {collectiveStep > 1 && (
+                  <button
+                    type="button"
+                    onClick={handleCollectiveBack}
+                    disabled={collectiveLoading}
+                    className="flex-1 cursor-pointer rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-text-muted transition-colors duration-200 hover:bg-border/30 focus:outline-none focus:ring-2 focus:ring-secondary/30 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Back
+                  </button>
+                )}
+                {collectiveStep < 4 ? (
+                  <button
+                    type="button"
+                    onClick={handleCollectiveNext}
+                    disabled={collectiveLoading}
+                    className="flex-1 cursor-pointer rounded-lg bg-secondary px-4 py-2.5 font-heading text-sm font-semibold text-white transition-all duration-200 hover:bg-secondary/90 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Next
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleCollectiveSubmit}
+                    disabled={collectiveLoading || !collectiveStatus.isMatch}
+                    className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 font-heading text-sm font-semibold text-white transition-all duration-200 hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {collectiveLoading ? (
+                      <>
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                        Creating…
+                      </>
+                    ) : (
+                      'Create expense'
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Buttons — only for non-COLLECTIVE split types */}
+          {splitType !== 'COLLECTIVE' && (
+            <div className="flex gap-3 pt-3 border-t border-border">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={loading}
+                className="flex-1 cursor-pointer rounded-lg border border-border px-4 py-3 text-sm font-medium text-text-muted transition-colors duration-200 hover:bg-border/30 focus:outline-none focus:ring-2 focus:ring-secondary/30 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 font-heading text-sm font-semibold text-white transition-all duration-200 hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading ? (
+                  <>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    Saving…
+                  </>
+                ) : (
+                  'Add expense'
+                )}
+              </button>
+            </div>
+          )}
+
+          {/* Cancel button for COLLECTIVE */}
+          {splitType === 'COLLECTIVE' && (
             <button
               type="button"
               onClick={onClose}
-              disabled={loading}
-              className="flex-1 cursor-pointer rounded-lg border border-border px-4 py-3 text-sm font-medium text-text-muted transition-colors duration-200 hover:bg-border/30 focus:outline-none focus:ring-2 focus:ring-secondary/30 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={collectiveLoading}
+              className="w-full cursor-pointer rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-text-muted transition-colors duration-200 hover:bg-border/30 focus:outline-none focus:ring-2 focus:ring-secondary/30 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Cancel
             </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 font-heading text-sm font-semibold text-white transition-all duration-200 hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading ? (
-                <>
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Saving…
-                </>
-              ) : (
-                'Add expense'
-              )}
-            </button>
-          </div>
+          )}
         </form>
       </div>
     </div>

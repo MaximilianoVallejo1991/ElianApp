@@ -1,26 +1,22 @@
 import { useState } from 'react';
 import { CurrencyDollarIcon } from '@heroicons/react/24/outline';
-import { individualItemService } from '../services/api';
+import { expenseService } from '../services/api';
 
 /**
- * IndividualItemForm — inline form to add or edit an individual item
- * within a collective expense.
- *
- * Each participant can report ONE item per collective expense. This form
- * handles both the "add" (new item) and "edit" (update existing) flows.
+ * ItemReportForm — inline form to add or edit an item within a COLLECTIVE expense.
  *
  * Props:
- *   groupId              — the group ID (string)
- *   collectiveExpenseId  — the collective expense ID (string)
- *   existingItem         — the user's existing item (null = add, object = edit)
- *   currency             — group currency (e.g. "USD")
- *   onSuccess            — callback after successful add/update/delete
- *   onCancel             — callback to hide the form (only for add mode)
- *   onDelete             — callback after successful deletion (only for edit mode)
+ *   groupId       — the group ID (string)
+ *   expenseId     — the expense ID (string)
+ *   existingItem  — the user's existing item (null = add, object = edit)
+ *   currency      — group currency (e.g. "USD")
+ *   onSuccess     — callback after successful add/update
+ *   onCancel      — callback to hide the form
+ *   onDelete      — callback after successful deletion (only for edit mode)
  */
-export default function IndividualItemForm({
+export default function ItemReportForm({
   groupId,
-  collectiveExpenseId,
+  expenseId,
   existingItem,
   currency = 'USD',
   onSuccess,
@@ -46,8 +42,9 @@ export default function IndividualItemForm({
   const parsedAmount = parseFloat(amount) || 0;
 
   const validate = () => {
-    if (!amount || parsedAmount <= 0)
+    if (!amount || parsedAmount <= 0) {
       return 'Amount must be a positive number.';
+    }
     return null;
   };
 
@@ -73,18 +70,9 @@ export default function IndividualItemForm({
       };
 
       if (isEditing) {
-        await individualItemService.update(
-          groupId,
-          collectiveExpenseId,
-          existingItem.id,
-          payload
-        );
+        await expenseService.updateItem(groupId, expenseId, existingItem.id, payload);
       } else {
-        await individualItemService.add(
-          groupId,
-          collectiveExpenseId,
-          payload
-        );
+        await expenseService.reportItem(groupId, expenseId, payload);
       }
 
       setLoading(false);
@@ -104,11 +92,7 @@ export default function IndividualItemForm({
     setDeleting(true);
     setError('');
     try {
-      await individualItemService.delete(
-        groupId,
-        collectiveExpenseId,
-        existingItem.id
-      );
+      await expenseService.deleteItem(groupId, expenseId, existingItem.id);
       setDeleting(false);
       onDelete?.();
     } catch (err) {
@@ -124,7 +108,7 @@ export default function IndividualItemForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-lg border border-border bg-background p-4 space-y-3"
+      className="space-y-3"
       noValidate
     >
       {isEditing && (
@@ -147,7 +131,7 @@ export default function IndividualItemForm({
         {/* Amount */}
         <div className="flex-1 min-w-0">
           <label
-            htmlFor={`item-amount-${collectiveExpenseId}`}
+            htmlFor={`item-amount-${expenseId}`}
             className="mb-1 block text-xs font-semibold text-text"
           >
             Amount
@@ -158,7 +142,7 @@ export default function IndividualItemForm({
               aria-hidden="true"
             />
             <input
-              id={`item-amount-${collectiveExpenseId}`}
+              id={`item-amount-${expenseId}`}
               type="number"
               required
               min="0.01"
@@ -178,18 +162,18 @@ export default function IndividualItemForm({
         {/* Description */}
         <div className="flex-[2] min-w-0">
           <label
-            htmlFor={`item-desc-${collectiveExpenseId}`}
+            htmlFor={`item-desc-${expenseId}`}
             className="mb-1 block text-xs font-semibold text-text"
           >
             Description{' '}
             <span className="font-normal text-text-muted">(opt.)</span>
           </label>
           <input
-            id={`item-desc-${collectiveExpenseId}`}
+            id={`item-desc-${expenseId}`}
             type="text"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="What did you buy?"
+            placeholder="mi gasto"
             className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-text transition-colors duration-200 placeholder:text-text-muted/50 focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary/20"
           />
         </div>

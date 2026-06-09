@@ -73,8 +73,12 @@ export async function calculateGroupBalances(groupId, userId) {
   });
 
   // 4. Fetch all expenses with splits for this group
+  // Only include expenses where isLocked=true:
+  // - All non-COLLECTIVE expenses have isLocked=true by default (COMPLETED)
+  // - COLLECTIVE expenses only have isLocked=true when status=COMPLETED
+  // This ensures PENDING COLLECTIVE expenses don't affect balances
   const expenses = await prisma.expense.findMany({
-    where: { groupId },
+    where: { groupId, isLocked: true },
     include: {
       splits: {
         select: { userId: true, amount: true },

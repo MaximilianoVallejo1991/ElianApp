@@ -89,10 +89,12 @@ async function computeSplits(totalAmount, splitType, splits, groupId) {
  * 2. Verifies the payer is an ACTIVE member.
  * 3. Verifies the group is in DYNAMIC mode.
  * 4. Computes splits based on splitType.
- * 5. Persists Expense + ExpenseSplit records.
+ * 5. For COLLECTIVE: sets status=PENDING, isLocked=false, no splits generated.
+ * 6. For non-COLLECTIVE: generates splits immediately, status=COMPLETED, isLocked=true.
+ * 7. Persists Expense + ExpenseSplit records (non-COLLECTIVE only).
  *
  * @param {string} groupId
- * @param {{ amount: number, description: string, category: string, payerId: string, splitType: string, splits: Array }} data
+ * @param {{ amount: number, description: string, category: string, payerId: string, splitType: string, splits: Array, sharedCosts?: number, participantIds?: string[] }} data
  * @param {string} userId — the authenticated (creating) user
  * @returns {Promise<object>} created expense with splits, payer, and creator
  */
@@ -118,7 +120,63 @@ export async function createExpense(groupId, data, userId) {
     );
   }
 
-  // 4. Compute splits
+  // 4. Handle COLLECTIVE vs non-COLLECTIVE
+  if (data.splitType === 'COLLECTIVE') {
+    // Validate participants are provided
+    if (!data.participantIds || data.participantIds.length === 0) {
+      throw new AppError('INVALID_PARTICIPANTS', 400, 'COLLECTIVE expenses require participantIds');
+    }
+
+    // Verify all participants are active members
+    const participantMemberships = await prisma.groupMember.findMany({
+      where: {
+        groupId,
+        userId: { in: data.participantIds },
+        status: 'ACTIVE',
+      },
+    });
+
+    if (participantMemberships.length !== data.participantIds.length) {
+      throw new AppError('INVALID_PARTICIPANTS', 400, 'All participants must be active group members');
+    }
+
+    // Create COLLECTIVE expense with PENDING status, unlocked, no splits
+    const expense = await prisma.expense.create({
+      data: {
+        groupId,
+        payerId: data.payerId,
+        createdById: userId,
+        description: data.description,
+        amount: data.amount,
+        category: data.category,
+        splitType: 'COLLECTIVE',
+        status: 'PENDING',
+        isLocked: false,
+        sharedCosts: data.sharedCosts || 0,
+        participantIds: data.participantIds,
+        date: new Date(),
+      },
+      include: {
+        splits: {
+          include: {
+            user: {
+              select: { id: true, email: true, nickName: true },
+            },
+          },
+        },
+        payer: {
+          select: { id: true, email: true, nickName: true },
+        },
+        createdBy: {
+          select: { id: true, email: true, nickName: true },
+        },
+      },
+    });
+
+    return expense;
+  }
+
+  // Non-COLLECTIVE: compute splits normally
   const calculatedSplits = await computeSplits(
     data.amount,
     data.splitType,
@@ -137,6 +195,8 @@ export async function createExpense(groupId, data, userId) {
       category: data.category,
       splitType: data.splitType,
       date: new Date(),
+      status: 'COMPLETED',
+      isLocked: true,
       splits: {
         create: calculatedSplits.map((s) => ({
           userId: s.userId,
@@ -201,7 +261,7 @@ export async function listExpenses(groupId, userId) {
 }
 
 /**
- * Get a single expense by ID with splits, payer, and creator populated.
+ * Get a single expense by ID with splits, payer, creator, and items (for COLLECTIVE) populated.
  *
  * Verifies the requesting user is an ACTIVE member of the expense's group.
  *
@@ -226,6 +286,13 @@ export async function getExpense(expenseId, userId) {
       },
       createdBy: {
         select: { id: true, email: true, nickName: true },
+      },
+      items: {
+        include: {
+          user: {
+            select: { id: true, email: true, nickName: true },
+          },
+        },
       },
     },
   });
@@ -380,4 +447,76 @@ export async function deleteExpense(expenseId, userId) {
   }
 
   await prisma.expense.delete({ where: { id: expenseId } });
+}
+
+/**
+ * Unlock a COMPLETED COLLECTIVE expense for further item edits.
+ * Only the creator can unlock.
+ *
+ * Resets status to PENDING, isLocked to false, and deletes existing splits
+ * so participants can report new items.
+ *
+ * @param {string} expenseId
+ * @param {string} userId
+ * @returns {Promise<object>} updated expense
+ * @throws {AppError} EXPENSE_NOT_FOUND | FORBIDDEN | INVALID_OPERATION
+ */
+export async function unlockExpense(expenseId, userId) {
+  const expense = await prisma.expense.findUnique({
+    where: { id: expenseId },
+  });
+
+  if (!expense) {
+    throw new AppError('EXPENSE_NOT_FOUND', 404, 'Expense not found');
+  }
+
+  if (expense.splitType !== 'COLLECTIVE') {
+    throw new AppError('INVALID_OPERATION', 400, 'Only COLLECTIVE expenses can be unlocked');
+  }
+
+  // Only creator can unlock
+  if (expense.createdById !== userId) {
+    throw new AppError('FORBIDDEN', 403, 'Only the creator can unlock this expense');
+  }
+
+  if (expense.status !== 'COMPLETED') {
+    throw new AppError('INVALID_OPERATION', 400, 'Only COMPLETED expenses can be unlocked');
+  }
+
+  // Reset status, unlock, and delete splits in a transaction
+  const updatedExpense = await prisma.$transaction(async (tx) => {
+    await tx.expenseSplit.deleteMany({ where: { expenseId } });
+
+    return tx.expense.update({
+      where: { id: expenseId },
+      data: {
+        status: 'PENDING',
+        isLocked: false,
+      },
+      include: {
+        splits: {
+          include: {
+            user: {
+              select: { id: true, email: true, nickName: true },
+            },
+          },
+        },
+        payer: {
+          select: { id: true, email: true, nickName: true },
+        },
+        createdBy: {
+          select: { id: true, email: true, nickName: true },
+        },
+        items: {
+          include: {
+            user: {
+              select: { id: true, email: true, nickName: true },
+            },
+          },
+        },
+      },
+    });
+  });
+
+  return updatedExpense;
 }

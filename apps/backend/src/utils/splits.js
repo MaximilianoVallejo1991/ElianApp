@@ -65,3 +65,54 @@ export function calculatePercentageSplits(totalAmount, splits) {
     percentage: s.percentage,
   }));
 }
+
+/**
+ * Compute COLLECTIVE expense status based on items sum and total.
+ *
+ * @param {number} itemsSum — sum of all item amounts
+ * @param {number} sharedCosts — shared costs amount
+ * @param {number} total — total expense amount
+ * @returns {'COMPLETED' | 'MISMATCH'}
+ */
+export function computeCollectiveStatus(itemsSum, sharedCosts, total) {
+  const epsilon = 0.01;
+  if (Math.abs(itemsSum + sharedCosts - total) <= epsilon) {
+    return 'COMPLETED';
+  }
+  return 'MISMATCH';
+}
+
+/**
+ * Calculate COLLECTIVE splits — each participant owes their item amount
+ * plus an equal share of the shared costs.
+ *
+ * The last participant absorbs any rounding remainder to ensure
+ * the total of all splits equals `totalAmount` exactly.
+ *
+ * @param {Array<{ userId: string, amount: number }>} items — each participant's item
+ * @param {number} sharedCosts — shared costs amount to split among participants
+ * @param {string[]} participantIds — ordered list of participant IDs
+ * @returns {Array<{ userId: string, amount: number }>}
+ */
+export function calculateCollectiveSplits(items, sharedCosts, participantIds) {
+  if (!participantIds || participantIds.length === 0) {
+    return [];
+  }
+
+  const participantCount = participantIds.length;
+  const sharedPerPerson = Math.round((sharedCosts / participantCount) * 100) / 100;
+  const distributedShared = sharedPerPerson * (participantCount - 1);
+  const lastShared = Math.round((sharedCosts - distributedShared) * 100) / 100;
+
+  // Build a map of userId -> item amount for quick lookup
+  const itemMap = new Map(items.map((item) => [item.userId, item.amount]));
+
+  return participantIds.map((userId, i) => {
+    const itemAmount = itemMap.get(userId) || 0;
+    const share = i < participantIds.length - 1 ? sharedPerPerson : lastShared;
+    return {
+      userId,
+      amount: Math.round((itemAmount + share) * 100) / 100,
+    };
+  });
+}
