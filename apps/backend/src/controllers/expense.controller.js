@@ -30,14 +30,19 @@ export async function create(req, res) {
 /**
  * GET /groups/:groupId/expenses  (PROTECTED)
  *
- * Returns all expenses for the group, ordered by createdAt descending.
+ * Returns paginated expenses for the group, ordered by createdAt descending.
+ * Query params: `limit` (default: all), `offset` (default: 0).
+ * Response: `{ data: Expense[], total: number, hasMore: boolean }`
  */
 export async function list(req, res) {
-  const expenses = await expenseService.listExpenses(
+  const limit = parseInt(req.query.limit, 10) || undefined;
+  const offset = parseInt(req.query.offset, 10) || undefined;
+  const result = await expenseService.listExpenses(
     req.params.groupId,
     req.user.userId,
+    { limit, offset },
   );
-  res.status(200).json(expenses);
+  res.status(200).json(result);
 }
 
 /**

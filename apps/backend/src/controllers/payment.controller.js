@@ -34,14 +34,19 @@ export async function create(req, res) {
 /**
  * GET /groups/:groupId/payments  (PROTECTED)
  *
- * Returns all payments for the group, ordered by paidAt descending.
+ * Returns paginated payments for the group, ordered by paidAt descending.
+ * Query params: `limit` (default: all), `offset` (default: 0).
+ * Response: `{ data: Payment[], total: number, hasMore: boolean }`
  */
 export async function list(req, res) {
-  const payments = await paymentService.listPayments(
+  const limit = parseInt(req.query.limit, 10) || undefined;
+  const offset = parseInt(req.query.offset, 10) || undefined;
+  const result = await paymentService.listPayments(
     req.params.groupId,
     req.user.userId,
+    { limit, offset },
   );
-  res.status(200).json(payments);
+  res.status(200).json(result);
 }
 
 /**

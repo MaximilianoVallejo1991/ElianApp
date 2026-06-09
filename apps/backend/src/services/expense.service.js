@@ -5,6 +5,8 @@ import {
   calculateEqualSplits,
   calculateExactSplits,
   calculatePercentageSplits,
+  calculateCollectiveSplits,
+  computeCollectiveStatus,
 } from '../utils/splits.js';
 
 // ---------------------------------------------------------------------------
@@ -140,37 +142,98 @@ export async function createExpense(groupId, data, userId) {
       throw new AppError('INVALID_PARTICIPANTS', 400, 'All participants must be active group members');
     }
 
-    // Create COLLECTIVE expense with PENDING status, unlocked, no splits
-    const expense = await prisma.expense.create({
-      data: {
-        groupId,
-        payerId: data.payerId,
-        createdById: userId,
-        description: data.description,
-        amount: data.amount,
-        category: data.category,
-        splitType: 'COLLECTIVE',
-        status: 'PENDING',
-        isLocked: false,
-        sharedCosts: data.sharedCosts || 0,
-        participantIds: data.participantIds,
-        date: new Date(),
-      },
-      include: {
-        splits: {
-          include: {
-            user: {
-              select: { id: true, email: true, nickName: true },
+    const items = data.items || [];
+
+    // Create COLLECTIVE expense (and items if provided) atomically
+    const expense = await prisma.$transaction(async (tx) => {
+      const newExpense = await tx.expense.create({
+        data: {
+          groupId,
+          payerId: data.payerId,
+          createdById: userId,
+          description: data.description,
+          amount: data.amount,
+          category: data.category,
+          splitType: 'COLLECTIVE',
+          status: 'PENDING',
+          isLocked: false,
+          sharedCosts: data.sharedCosts || 0,
+          participantIds: data.participantIds,
+          date: data.date ? new Date(data.date) : new Date(),
+        },
+      });
+
+      // Create items if provided — inline recompute + split generation
+      if (items.length > 0) {
+        await tx.expenseItem.createMany({
+          data: items.map((item) => ({
+            expenseId: newExpense.id,
+            userId: item.userId,
+            amount: item.amount,
+            description: item.description || 'mi gasto',
+          })),
+        });
+
+        const itemsSum = items.reduce((sum, item) => sum + item.amount, 0);
+        const sharedCosts = Number(data.sharedCosts) || 0;
+        const total = Number(data.amount);
+        const newStatus = computeCollectiveStatus(itemsSum, sharedCosts, total);
+
+        if (newStatus === 'COMPLETED') {
+          const splits = calculateCollectiveSplits(
+            items.map((i) => ({ userId: i.userId, amount: i.amount })),
+            sharedCosts,
+            data.participantIds,
+          );
+
+          await tx.expenseSplit.deleteMany({ where: { expenseId: newExpense.id } });
+
+          await tx.expenseSplit.createMany({
+            data: splits.map((s) => ({
+              expenseId: newExpense.id,
+              userId: s.userId,
+              amount: s.amount,
+            })),
+          });
+
+          await tx.expense.update({
+            where: { id: newExpense.id },
+            data: { status: 'COMPLETED', isLocked: true },
+          });
+        } else {
+          await tx.expense.update({
+            where: { id: newExpense.id },
+            data: { status: 'MISMATCH', isLocked: false },
+          });
+        }
+      }
+
+      // Return the full expense with all relations
+      return tx.expense.findUnique({
+        where: { id: newExpense.id },
+        include: {
+          splits: {
+            include: {
+              user: {
+                select: { id: true, email: true, nickName: true },
+              },
+            },
+          },
+          payer: {
+            select: { id: true, email: true, nickName: true },
+          },
+          createdBy: {
+            select: { id: true, email: true, nickName: true },
+          },
+          items: {
+            include: {
+              user: {
+                select: { id: true, email: true, nickName: true },
+              },
             },
           },
         },
-        payer: {
-          select: { id: true, email: true, nickName: true },
-        },
-        createdBy: {
-          select: { id: true, email: true, nickName: true },
-        },
-      },
+      });
     });
 
     return expense;
@@ -194,7 +257,7 @@ export async function createExpense(groupId, data, userId) {
       amount: data.amount,
       category: data.category,
       splitType: data.splitType,
-      date: new Date(),
+      date: data.date ? new Date(data.date) : new Date(),
       status: 'COMPLETED',
       isLocked: true,
       splits: {
@@ -230,32 +293,47 @@ export async function createExpense(groupId, data, userId) {
  *
  * Verifies the requesting user is an ACTIVE member of the group.
  *
+ * When `limit` and `offset` are provided, returns a paginated response
+ * with `{ data, total, hasMore }`. Otherwise returns the raw array
+ * (backward-compatible).
+ *
  * @param {string} groupId
  * @param {string} userId
- * @returns {Promise<Array<object>>}
+ * @param {{ limit?: number, offset?: number }} [opts]
+ * @returns {Promise<Array<object>|{ data: Array<object>, total: number, hasMore: boolean }>>}
  */
-export async function listExpenses(groupId, userId) {
+export async function listExpenses(groupId, userId, { limit, offset } = {}) {
   await requireActiveMember(groupId, userId);
 
-  const expenses = await prisma.expense.findMany({
-    where: { groupId },
-    include: {
-      splits: {
-        include: {
-          user: {
-            select: { id: true, email: true, nickName: true },
+  const [total, expenses] = await Promise.all([
+    prisma.expense.count({ where: { groupId, deletedAt: null } }),
+    prisma.expense.findMany({
+      where: { groupId, deletedAt: null },
+      include: {
+        splits: {
+          include: {
+            user: {
+              select: { id: true, email: true, nickName: true },
+            },
           },
         },
+        payer: {
+          select: { id: true, email: true, nickName: true },
+        },
+        createdBy: {
+          select: { id: true, email: true, nickName: true },
+        },
       },
-      payer: {
-        select: { id: true, email: true, nickName: true },
-      },
-      createdBy: {
-        select: { id: true, email: true, nickName: true },
-      },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
+      orderBy: { createdAt: 'desc' },
+      ...(limit !== undefined && { take: limit }),
+      ...(offset !== undefined && { skip: offset }),
+    }),
+  ]);
+
+  if (limit !== undefined || offset !== undefined) {
+    const hasMore = (offset || 0) + expenses.length < total;
+    return { data: expenses, total, hasMore };
+  }
 
   return expenses;
 }
@@ -301,6 +379,10 @@ export async function getExpense(expenseId, userId) {
     throw new AppError('EXPENSE_NOT_FOUND', 404, 'Expense not found');
   }
 
+  if (expense.deletedAt !== null) {
+    throw new AppError('EXPENSE_NOT_FOUND', 404, 'Expense not found');
+  }
+
   // Verify membership in the expense's group
   await requireActiveMember(expense.groupId, userId);
 
@@ -325,6 +407,10 @@ export async function updateExpense(expenseId, data, userId) {
   });
 
   if (!existing) {
+    throw new AppError('EXPENSE_NOT_FOUND', 404, 'Expense not found');
+  }
+
+  if (existing.deletedAt !== null) {
     throw new AppError('EXPENSE_NOT_FOUND', 404, 'Expense not found');
   }
 
@@ -364,6 +450,7 @@ export async function updateExpense(expenseId, data, userId) {
           ...(data.description !== undefined && { description: data.description }),
           ...(data.category !== undefined && { category: data.category }),
           ...(data.splitType !== undefined && { splitType: data.splitType }),
+          ...(data.date !== undefined && { date: new Date(data.date) }),
           splits: {
             create: calculatedSplits.map((s) => ({
               userId: s.userId,
@@ -397,6 +484,7 @@ export async function updateExpense(expenseId, data, userId) {
         ...(data.amount !== undefined && { amount: data.amount }),
         ...(data.description !== undefined && { description: data.description }),
         ...(data.category !== undefined && { category: data.category }),
+        ...(data.date !== undefined && { date: new Date(data.date) }),
       },
       include: {
         splits: {
@@ -420,9 +508,11 @@ export async function updateExpense(expenseId, data, userId) {
 }
 
 /**
- * Delete an expense (hard delete). Only the payer or creator can delete.
+ * Delete an expense (soft delete). Only the payer or creator can delete.
  *
- * Prisma onDelete: Cascade on ExpenseSplit handles cleanup automatically.
+ * Sets deletedAt to mark the expense as removed without losing data.
+ * Prisma onDelete: Cascade on ExpenseSplit and ExpenseItem is preserved
+ * because the Expense record is not actually removed.
  *
  * @param {string} expenseId
  * @param {string} userId
@@ -446,7 +536,10 @@ export async function deleteExpense(expenseId, userId) {
     );
   }
 
-  await prisma.expense.delete({ where: { id: expenseId } });
+  await prisma.expense.update({
+    where: { id: expenseId },
+    data: { deletedAt: new Date() },
+  });
 }
 
 /**
@@ -467,6 +560,10 @@ export async function unlockExpense(expenseId, userId) {
   });
 
   if (!expense) {
+    throw new AppError('EXPENSE_NOT_FOUND', 404, 'Expense not found');
+  }
+
+  if (expense.deletedAt !== null) {
     throw new AppError('EXPENSE_NOT_FOUND', 404, 'Expense not found');
   }
 

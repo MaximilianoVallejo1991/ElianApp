@@ -165,3 +165,25 @@ export async function consumeInviteToken(token, userId) {
     groupName: group.name,
   };
 }
+
+/**
+ * Remove expired invite tokens from all groups.
+ *
+ * Called automatically on server startup and can be triggered manually.
+ * Clears both inviteToken and inviteExpires for any group whose
+ * inviteExpires has passed.
+ *
+ * @returns {Promise<number>} number of tokens cleaned up
+ */
+export async function cleanupExpiredInviteTokens() {
+  const result = await prisma.group.updateMany({
+    where: {
+      inviteExpires: { lt: new Date() },
+    },
+    data: {
+      inviteToken: null,
+      inviteExpires: null,
+    },
+  });
+  return result.count;
+}

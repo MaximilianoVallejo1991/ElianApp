@@ -42,6 +42,7 @@ export default function ExpenseForm({
   const [payerId, setPayerId] = useState(currentUserId || '');
   const [splitType, setSplitType] = useState('EQUAL');
   const [splits, setSplits] = useState([]);
+  const [date, setDate] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -228,6 +229,15 @@ export default function ExpenseForm({
     setCollectiveError('');
 
     try {
+      // Build items array from collectiveItems for atomic creation
+      const items = selectedParticipantIds
+        .filter((uid) => collectiveItems[uid]?.amount)
+        .map((uid) => ({
+          userId: uid,
+          amount: parseFloat(collectiveItems[uid].amount),
+          description: collectiveItems[uid].description || undefined,
+        }));
+
       const payload = {
         amount: parseFloat(amount),
         description: description.trim(),
@@ -236,25 +246,11 @@ export default function ExpenseForm({
         splitType: 'COLLECTIVE',
         sharedCosts: parseFloat(sharedCosts) || 0,
         participantIds: selectedParticipantIds,
+        items,
+        ...(date && { date: new Date(date).toISOString() }),
       };
 
-      const result = await expenseService.create(groupId, payload);
-      const expenseId = result.data?.id;
-
-      // Report items for each participant
-      await Promise.all(
-        selectedParticipantIds.map((uid) => {
-          const item = collectiveItems[uid];
-          if (item && item.amount) {
-            return expenseService.reportItem(groupId, expenseId, {
-              userId: uid,
-              amount: parseFloat(item.amount),
-              description: item.description || 'mi gasto',
-            });
-          }
-          return Promise.resolve();
-        })
-      );
+      await expenseService.create(groupId, payload);
 
       setCollectiveLoading(false);
       onSuccess?.();
@@ -327,6 +323,7 @@ export default function ExpenseForm({
         category,
         payerId,
         splitType,
+        ...(date && { date: new Date(date).toISOString() }),
         splits:
           splitType === 'EQUAL'
             ? [{ userId: members[0]?.userId || '' }] // dummy — backend computes equal split from members
@@ -445,6 +442,20 @@ export default function ExpenseForm({
                 {currency}
               </span>
             </div>
+          </div>
+
+          {/* Date */}
+          <div>
+            <label htmlFor="expense-date" className="mb-1.5 block text-sm font-semibold text-text">
+              Date
+            </label>
+            <input
+              id="expense-date"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full rounded-lg border border-border bg-white px-4 py-3 text-text transition-colors duration-200 focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary/20"
+            />
           </div>
 
           {/* Category */}
@@ -668,6 +679,18 @@ export default function ExpenseForm({
                         {currency}
                       </span>
                     </div>
+                  </div>
+                  <div>
+                    <label htmlFor="collective-date" className="mb-1.5 block text-xs font-semibold text-text">
+                      Date
+                    </label>
+                    <input
+                      id="collective-date"
+                      type="date"
+                      value={date}
+                      onChange={(e) => setDate(e.target.value)}
+                      className="w-full rounded-lg border border-border bg-white px-4 py-2.5 text-sm text-text transition-colors duration-200 focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary/20"
+                    />
                   </div>
                 </div>
               )}

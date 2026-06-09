@@ -34,6 +34,7 @@ export const createExpenseSchema = z.object({
       message: 'Split type must be EQUAL, EXACT, PERCENTAGE, or COLLECTIVE',
     }),
   }),
+  date: z.string().datetime('Date must be a valid ISO datetime').optional(),
   // Splits required for EQUAL, EXACT, PERCENTAGE; not used for COLLECTIVE
   splits: z
     .array(
@@ -47,6 +48,16 @@ export const createExpenseSchema = z.object({
   // COLLECTIVE-specific fields
   sharedCosts: z.number().min(0, 'Shared costs must be non-negative').optional(),
   participantIds: z.array(z.string()).optional(),
+  // Optional items for atomic COLLECTIVE creation
+  items: z
+    .array(
+      z.object({
+        userId: z.string().min(1, 'User ID is required'),
+        amount: z.number().min(0, 'Amount must be non-negative'),
+        description: z.string().optional(),
+      }),
+    )
+    .optional(),
 });
 
 /**

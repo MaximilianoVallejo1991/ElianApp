@@ -86,6 +86,8 @@ model Payment {
 
   paidAt     DateTime @default(now())
 
+  deletedAt  DateTime?
+
   group       Group @relation(fields: [groupId], references: [id])
 
   fromUser    User @relation("PaymentSender", fields: [fromUserId], references: [id])
@@ -146,6 +148,8 @@ model Expense {
   isLocked    Boolean       @default(true)
   sharedCosts Decimal?      @default(0)
   participantIds String[]   @default([])
+
+  deletedAt   DateTime?
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

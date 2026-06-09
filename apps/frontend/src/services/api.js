@@ -73,8 +73,8 @@ export const expenseService = {
   create: (groupId, data) =>
     api.post(`/groups/${groupId}/expenses`, data),
 
-  getAll: (groupId) =>
-    api.get(`/groups/${groupId}/expenses`),
+  getAll: (groupId, params = {}) =>
+    api.get(`/groups/${groupId}/expenses`, { params }),
 
   getOne: (groupId, expenseId) =>
     api.get(`/groups/${groupId}/expenses/${expenseId}`),
@@ -110,8 +110,8 @@ export const paymentService = {
   create: (groupId, data) =>
     api.post(`/groups/${groupId}/payments`, data),
 
-  getAll: (groupId) =>
-    api.get(`/groups/${groupId}/payments`),
+  getAll: (groupId, params = {}) =>
+    api.get(`/groups/${groupId}/payments`, { params }),
 
   delete: (groupId, paymentId) =>
     api.delete(`/groups/${groupId}/payments/${paymentId}`),

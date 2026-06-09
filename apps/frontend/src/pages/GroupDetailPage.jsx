@@ -20,6 +20,7 @@ import {
   groupService,
   balanceService,
   expenseService,
+  paymentService,
 } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import ExpenseForm from '../components/ExpenseForm';
@@ -80,6 +81,20 @@ export default function GroupDetailPage() {
   // Item reporting modal state for COLLECTIVE expenses
   const [showItemModalFor, setShowItemModalFor] = useState(null);
 
+  // Pagination state for expenses
+  const [expenses, setExpenses] = useState([]);
+  const [hasMoreExpenses, setHasMoreExpenses] = useState(false);
+  const [expensePage, setExpensePage] = useState(1);
+  const [expenseLimit] = useState(20);
+  const [expensesLoading, setExpensesLoading] = useState(false);
+
+  // Pagination state for payments
+  const [payments, setPayments] = useState([]);
+  const [hasMorePayments, setHasMorePayments] = useState(false);
+  const [paymentPage, setPaymentPage] = useState(1);
+  const [paymentLimit] = useState(20);
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
+
   const loadGroup = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -96,10 +111,62 @@ export default function GroupDetailPage() {
       } else {
         setError(err.message || 'Failed to load group details.');
       }
-    } finally {
       setLoading(false);
+      return;
     }
-  }, [id]);
+
+    setLoading(false);
+
+    // Load paginated expenses and payments (first page)
+    try {
+      const [expenseRes, paymentRes] = await Promise.all([
+        expenseService.getAll(id, { limit: expenseLimit, offset: 0 }),
+        paymentService.getAll(id, { limit: paymentLimit, offset: 0 }),
+      ]);
+      setExpenses(expenseRes.data.data || []);
+      setHasMoreExpenses(expenseRes.data.hasMore || false);
+      setExpensePage(1);
+      setPayments(paymentRes.data.data || []);
+      setHasMorePayments(paymentRes.data.hasMore || false);
+      setPaymentPage(1);
+    } catch {
+      // Silently ignore pagination load failures
+    }
+  }, [id, expenseLimit, paymentLimit]);
+
+  const handleLoadMoreExpenses = useCallback(async () => {
+    setExpensesLoading(true);
+    const nextPage = expensePage + 1;
+    const offset = (nextPage - 1) * expenseLimit;
+    try {
+      const response = await expenseService.getAll(id, { limit: expenseLimit, offset });
+      const { data, hasMore } = response.data;
+      setExpenses((prev) => [...prev, ...data]);
+      setHasMoreExpenses(hasMore);
+      setExpensePage(nextPage);
+    } catch {
+      // Silently ignore load failures
+    } finally {
+      setExpensesLoading(false);
+    }
+  }, [id, expensePage, expenseLimit]);
+
+  const handleLoadMorePayments = useCallback(async () => {
+    setPaymentsLoading(true);
+    const nextPage = paymentPage + 1;
+    const offset = (nextPage - 1) * paymentLimit;
+    try {
+      const response = await paymentService.getAll(id, { limit: paymentLimit, offset });
+      const { data, hasMore } = response.data;
+      setPayments((prev) => [...prev, ...data]);
+      setHasMorePayments(hasMore);
+      setPaymentPage(nextPage);
+    } catch {
+      // Silently ignore load failures
+    } finally {
+      setPaymentsLoading(false);
+    }
+  }, [id, paymentPage, paymentLimit]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data fetch
@@ -142,8 +209,6 @@ export default function GroupDetailPage() {
   }
 
   const members = group.members || [];
-  const expenses = group.expenses || [];
-  const payments = group.payments || [];
   const currency = group.currency || 'USD';
   const currentUserId = currentUser?.id;
 
@@ -410,7 +475,7 @@ export default function GroupDetailPage() {
                 No expenses yet. Add your first expense to start splitting.
               </p>
             </div>
-          ) : (
+          ) : (<>
             <div className="mt-4 space-y-3">
               {expenses.map((expense) => {
                 const isCollective = expense.splitType === 'COLLECTIVE';
@@ -639,6 +704,19 @@ export default function GroupDetailPage() {
                 );
               })}
             </div>
+            {hasMoreExpenses && (
+              <div className="mt-4 text-center">
+                <button
+                  type="button"
+                  onClick={handleLoadMoreExpenses}
+                  disabled={expensesLoading}
+                  className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-white px-5 py-2.5 text-sm font-semibold text-secondary transition-all duration-200 hover:bg-secondary/5 focus:outline-none focus:ring-2 focus:ring-secondary/30 disabled:opacity-50"
+                >
+                  {expensesLoading ? 'Loading...' : 'Load more expenses'}
+                </button>
+              </div>
+            )}
+            </>
           )}
         </section>
 
@@ -663,7 +741,7 @@ export default function GroupDetailPage() {
                 No payments recorded yet.
               </p>
             </div>
-          ) : (
+          ) : (<>
             <div className="mt-4 rounded-xl border border-border bg-white">
               <ul className="divide-y divide-border">
                 {payments.map((payment) => (
@@ -698,6 +776,19 @@ export default function GroupDetailPage() {
                 ))}
               </ul>
             </div>
+            {hasMorePayments && (
+              <div className="mt-4 text-center">
+                <button
+                  type="button"
+                  onClick={handleLoadMorePayments}
+                  disabled={paymentsLoading}
+                  className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-white px-5 py-2.5 text-sm font-semibold text-cta transition-all duration-200 hover:bg-cta/5 focus:outline-none focus:ring-2 focus:ring-cta/30 disabled:opacity-50"
+                >
+                  {paymentsLoading ? 'Loading...' : 'Load more payments'}
+                </button>
+              </div>
+            )}
+            </>
           )}
         </section>
       </div>
