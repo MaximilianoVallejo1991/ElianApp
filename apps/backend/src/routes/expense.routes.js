@@ -25,10 +25,22 @@ const router = Router({ mergeParams: true });
 // --- All routes protected ---------------------------------------------------
 router.use(authenticate);
 
+// Pre-validation: reject EXACT split type (removed from enum)
+function rejectExactSplit(req, res, next) {
+  if (req.body?.splitType === 'EXACT') {
+    return res.status(400).json({
+      error: 'EXACT split type no longer supported',
+      code: 'INVALID_SPLIT_TYPE',
+    });
+  }
+  next();
+}
+
 // POST /groups/:groupId/expenses
 // Create an expense. Body validated by Zod. Split math validated by service.
 router.post(
   '/expenses',
+  rejectExactSplit,
   validate(createExpenseSchema),
   expenseController.create,
 );
