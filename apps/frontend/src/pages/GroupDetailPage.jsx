@@ -681,7 +681,7 @@ export default function GroupDetailPage() {
                     {!isCollective && expense.splits && expense.splits.length > 0 && (
                       <div className="mt-3 border-t border-border pt-3">
                         <p className="mb-1.5 text-xs font-medium text-text-muted uppercase tracking-wider">
-                          Split {expense.splitType === 'EQUAL' ? 'equally' : expense.splitType === 'PERCENTAGE' ? 'by percentage' : 'by exact amount'}
+                          Split {expense.splitType === 'EQUAL' ? 'equally' : 'by percentage'}
                         </p>
                         <div className="flex flex-wrap gap-2">
                           {expense.splits.map((split) => (

@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   calculateEqualSplits,
-  calculateExactSplits,
   calculatePercentageSplits,
   computeCollectiveStatus,
   calculateCollectiveSplits,
@@ -52,39 +51,6 @@ describe('calculateEqualSplits', () => {
     expect(result[4].amount).toBe(0.2);
     const total = result.reduce((sum, s) => sum + s.amount, 0);
     expect(total).toBe(1);
-  });
-});
-
-describe('calculateExactSplits', () => {
-  it('returns exact splits with rounded amounts', () => {
-    const result = calculateExactSplits(100, [
-      { userId: 'u1', amount: 25.5 },
-      { userId: 'u2', amount: 74.5 },
-    ]);
-    expect(result).toHaveLength(2);
-    expect(result[0]).toEqual({ userId: 'u1', amount: 25.5 });
-    expect(result[1]).toEqual({ userId: 'u2', amount: 74.5 });
-  });
-
-  it('rounds amounts to 2 decimal places', () => {
-    const result = calculateExactSplits(100, [
-      { userId: 'u1', amount: 33.333 },
-      { userId: 'u2', amount: 33.333 },
-      { userId: 'u3', amount: 33.334 },
-    ]);
-    expect(result[0].amount).toBe(33.33);
-    expect(result[1].amount).toBe(33.33);
-    expect(result[2].amount).toBe(33.33);
-  });
-
-  it('preserves user IDs', () => {
-    const result = calculateExactSplits(50, [{ userId: 'abc-123', amount: 50 }]);
-    expect(result[0].userId).toBe('abc-123');
-  });
-
-  it('handles empty splits array', () => {
-    const result = calculateExactSplits(100, []);
-    expect(result).toEqual([]);
   });
 });
 

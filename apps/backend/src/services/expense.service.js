@@ -3,7 +3,6 @@ import { AppError } from '../utils/errors.js';
 import { validateSplits } from '../schemas/expense.schemas.js';
 import {
   calculateEqualSplits,
-  calculateExactSplits,
   calculatePercentageSplits,
   calculateCollectiveSplits,
   computeCollectiveStatus,
@@ -50,7 +49,7 @@ async function requireActiveMember(groupId, userId) {
  * Compute the split array based on expense amount, split type, and input splits.
  *
  * @param {number} totalAmount
- * @param {'EQUAL'|'EXACT'|'PERCENTAGE'} splitType
+ * @param {'EQUAL'|'PERCENTAGE'} splitType
  * @param {Array<{ userId: string, amount?: number, percentage?: number }>} splits
  * @param {string} groupId — needed to fetch active members for EQUAL splits
  * @returns {Promise<Array<{ userId: string, amount: number, percentage?: number }>>}
@@ -67,10 +66,6 @@ async function computeSplits(totalAmount, splitType, splits, groupId) {
 
     const memberIds = activeMembers.map((m) => m.userId);
     return calculateEqualSplits(totalAmount, memberIds);
-  }
-
-  if (splitType === 'EXACT') {
-    return calculateExactSplits(totalAmount, splits);
   }
 
   if (splitType === 'PERCENTAGE') {

@@ -31,24 +31,6 @@ export function calculateEqualSplits(totalAmount, memberIds) {
 }
 
 /**
- * Calculate exact splits — each member pays the amount explicitly provided.
- *
- * The caller MUST validate that amounts sum to `totalAmount` before calling.
- * This function applies rounding and returns the splits as-is.
- *
- * @param {number} totalAmount — total expense amount (unused except for documentation)
- * @param {Array<{ userId: string, amount: number }>} splits — pre-validated exact amounts
- * @returns {Array<{ userId: string, amount: number }>}
- */
-export function calculateExactSplits(totalAmount, splits) {
-  // Caller has already validated the sum; apply rounding for safety
-  return splits.map((s) => ({
-    userId: s.userId,
-    amount: Math.round(s.amount * 100) / 100,
-  }));
-}
-
-/**
  * Calculate percentage splits — each member pays `totalAmount * percentage / 100`.
  *
  * The caller MUST validate that percentages sum to 100 before calling.
