@@ -29,12 +29,13 @@ export const createExpenseSchema = z.object({
     }),
   }),
   payerId: z.string().min(1, 'Payer ID is required'),
-  splitType: z.enum(['EQUAL', 'EXACT', 'PERCENTAGE', 'COLLECTIVE'], {
+  splitType: z.enum(['EQUAL', 'PERCENTAGE', 'COLLECTIVE'], {
     errorMap: () => ({
-      message: 'Split type must be EQUAL, EXACT, PERCENTAGE, or COLLECTIVE',
+      message: 'Split type must be EQUAL, PERCENTAGE, or COLLECTIVE',
     }),
   }),
-  // Splits required for EQUAL, EXACT, PERCENTAGE; not used for COLLECTIVE
+  date: z.string().datetime('Date must be a valid ISO datetime').optional(),
+  // Splits required for EQUAL, PERCENTAGE; not used for COLLECTIVE
   splits: z
     .array(
       z.object({
@@ -47,6 +48,16 @@ export const createExpenseSchema = z.object({
   // COLLECTIVE-specific fields
   sharedCosts: z.number().min(0, 'Shared costs must be non-negative').optional(),
   participantIds: z.array(z.string()).optional(),
+  // Optional items for atomic COLLECTIVE creation
+  items: z
+    .array(
+      z.object({
+        userId: z.string().min(1, 'User ID is required'),
+        amount: z.number().min(0, 'Amount must be non-negative'),
+        description: z.string().optional(),
+      }),
+    )
+    .optional(),
 });
 
 /**
@@ -103,23 +114,12 @@ export const createPaymentSchema = z.object({
  * Throws AppError with code INVALID_SPLITS if the math doesn't add up.
  *
  * @param {number} totalAmount — the expense amount
- * @param {'EQUAL'|'EXACT'|'PERCENTAGE'} splitType
+ * @param {'EQUAL'|'PERCENTAGE'} splitType
  * @param {Array<{ userId: string, amount?: number, percentage?: number }>} splits
  * @throws {AppError} INVALID_SPLITS
  */
 export function validateSplits(totalAmount, splitType, splits) {
   const epsilon = 0.01; // tolerance for floating-point rounding
-
-  if (splitType === 'EXACT') {
-    const sum = splits.reduce((acc, s) => acc + (s.amount || 0), 0);
-    if (Math.abs(sum - totalAmount) > epsilon) {
-      throw new AppError(
-        'INVALID_SPLITS',
-        400,
-        'Split amounts must sum to expense amount',
-      );
-    }
-  }
 
   if (splitType === 'PERCENTAGE') {
     const sum = splits.reduce((acc, s) => acc + (s.percentage || 0), 0);

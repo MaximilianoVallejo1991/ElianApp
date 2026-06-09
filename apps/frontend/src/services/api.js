@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:4000',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:4000',
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
@@ -73,8 +73,8 @@ export const expenseService = {
   create: (groupId, data) =>
     api.post(`/groups/${groupId}/expenses`, data),
 
-  getAll: (groupId) =>
-    api.get(`/groups/${groupId}/expenses`),
+  getAll: (groupId, params = {}) =>
+    api.get(`/groups/${groupId}/expenses`, { params }),
 
   getOne: (groupId, expenseId) =>
     api.get(`/groups/${groupId}/expenses/${expenseId}`),
@@ -110,8 +110,8 @@ export const paymentService = {
   create: (groupId, data) =>
     api.post(`/groups/${groupId}/payments`, data),
 
-  getAll: (groupId) =>
-    api.get(`/groups/${groupId}/payments`),
+  getAll: (groupId, params = {}) =>
+    api.get(`/groups/${groupId}/payments`, { params }),
 
   delete: (groupId, paymentId) =>
     api.delete(`/groups/${groupId}/payments/${paymentId}`),

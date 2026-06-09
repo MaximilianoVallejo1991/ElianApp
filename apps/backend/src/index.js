@@ -11,6 +11,7 @@ import membershipRoutes from './routes/membership.routes.js';
 import expenseRoutes from './routes/expense.routes.js';
 import paymentRoutes from './routes/payment.routes.js';
 import inviteRoutes from './routes/invite.routes.js';
+import { cleanupExpiredInviteTokens } from './services/invite.service.js';
 
 
 const app = express();
@@ -43,6 +44,12 @@ app.use('/groups/:groupId', inviteRoutes);
 
 // --- Error handler (MUST be last) --------------------------------------------
 app.use(errorHandler);
+
+// --- Cleanup expired invite tokens on startup ---------------------------------
+const cleaned = await cleanupExpiredInviteTokens();
+if (cleaned > 0) {
+  console.log(`Cleaned up ${cleaned} expired invite token(s)`);
+}
 
 // --- Start -------------------------------------------------------------------
 const PORT = process.env.PORT || 4000;

@@ -2,7 +2,7 @@
  * Split calculation utility — pure functions for expense split math.
  *
  * All amounts are rounded to 2 decimal places to avoid floating-point drift.
- * These functions are unit-testable without any database dependencies.
+ * These functions are unit-testable without any external dependencies.
  */
 
 /**

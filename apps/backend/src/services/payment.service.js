@@ -107,7 +107,25 @@ export async function createPayment(
     throw new AppError('INVALID_SPLITS', 400, 'Amount must be a positive number');
   }
 
-  // 6. Create payment
+  // 6. Prevent duplicate active payments
+  const existingPayment = await prisma.payment.findFirst({
+    where: {
+      groupId,
+      fromUserId,
+      toUserId,
+      deletedAt: null,
+    },
+  });
+
+  if (existingPayment) {
+    throw new AppError(
+      'DUPLICATE_PAYMENT',
+      409,
+      'An active payment between these users already exists',
+    );
+  }
+
+  // 7. Create payment
   const payment = await prisma.payment.create({
     data: {
       groupId,
@@ -135,31 +153,48 @@ export async function createPayment(
  *
  * Verifies the requesting user is an ACTIVE member.
  *
+ * When `limit` and `offset` are provided, returns a paginated response
+ * with `{ data, total, hasMore }`. Otherwise returns the raw array
+ * (backward-compatible).
+ *
  * @param {string} groupId
  * @param {string} userId — authenticated user
- * @returns {Promise<Array<object>>} payments with fromUser and toUser
+ * @param {{ limit?: number, offset?: number }} [opts]
+ * @returns {Promise<Array<object>|{ data: Array<object>, total: number, hasMore: boolean }>>}
  */
-export async function listPayments(groupId, userId) {
+export async function listPayments(groupId, userId, { limit, offset } = {}) {
   await requireActiveMember(groupId, userId);
 
-  const payments = await prisma.payment.findMany({
-    where: { groupId },
-    include: {
-      fromUser: {
-        select: { id: true, email: true, nickName: true },
+  const [total, payments] = await Promise.all([
+    prisma.payment.count({ where: { groupId, deletedAt: null } }),
+    prisma.payment.findMany({
+      where: { groupId, deletedAt: null },
+      include: {
+        fromUser: {
+          select: { id: true, email: true, nickName: true },
+        },
+        toUser: {
+          select: { id: true, email: true, nickName: true },
+        },
       },
-      toUser: {
-        select: { id: true, email: true, nickName: true },
-      },
-    },
-    orderBy: { paidAt: 'desc' },
-  });
+      orderBy: { paidAt: 'desc' },
+      ...(limit !== undefined && { take: limit }),
+      ...(offset !== undefined && { skip: offset }),
+    }),
+  ]);
+
+  if (limit !== undefined || offset !== undefined) {
+    const hasMore = (offset || 0) + payments.length < total;
+    return { data: payments, total, hasMore };
+  }
 
   return payments;
 }
 
 /**
- * Delete a payment (hard delete). Only the sender can delete.
+ * Delete a payment (soft delete). Only the sender can delete.
+ *
+ * Sets deletedAt to mark the payment as removed without losing data.
  *
  * @param {string} paymentId
  * @param {string} userId — authenticated user
@@ -183,5 +218,8 @@ export async function deletePayment(paymentId, userId) {
     );
   }
 
-  await prisma.payment.delete({ where: { id: paymentId } });
+  await prisma.payment.update({
+    where: { id: paymentId },
+    data: { deletedAt: new Date() },
+  });
 }
