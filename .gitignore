@@ -17,3 +17,11 @@ Thumbs.db
 # Atl (agent config - personal)
 
 .engram
+
+# Engram (personal memory - do NOT commit)
+engram/
+engram-export.json
+check-engram.js
+update-engram-export.js
+sync-engram.js
+.vite/
