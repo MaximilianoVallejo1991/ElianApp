@@ -422,33 +422,67 @@ export default function GroupDetailPage() {
           ) : (
             <div className="mt-4 rounded-xl border border-border bg-white">
               <ul className="divide-y divide-border">
-                {balances.map((b) => (
-                  <li
-                    key={b.userId}
-                    className="flex items-center justify-between px-5 py-4 first:rounded-t-xl last:rounded-b-xl"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/5">
-                        <UserIcon className="h-4 w-4 text-primary" aria-hidden="true" />
-                      </div>
-                      <span className="text-sm font-semibold text-text">
-                        {b.user?.nickName || b.user?.email || b.userId}
-                      </span>
-                    </div>
-                    <span
-                      className={`text-sm font-semibold ${
-                        b.netBalance > 0
-                          ? 'text-success'
-                          : b.netBalance < 0
-                            ? 'text-error'
-                            : 'text-text-muted'
-                      }`}
+                {balances.map((b) => {
+                  const isPositive = b.netBalance > 0;
+                  const isNegative = b.netBalance < 0;
+                  const owes = isNegative ? b.owedTo || [] : [];
+                  const owed = isPositive ? b.owedBy || [] : [];
+
+                  return (
+                    <li
+                      key={b.userId}
+                      className="px-5 py-4 first:rounded-t-xl last:rounded-b-xl"
                     >
-                      {b.netBalance > 0 ? '+' : ''}
-                      {formatCurrency(b.netBalance, currency)}
-                    </span>
-                  </li>
-                ))}
+                      {/* User row */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/5">
+                            <UserIcon className="h-4 w-4 text-primary" aria-hidden="true" />
+                          </div>
+                          <span className="text-sm font-semibold text-text">
+                            {b.user?.nickName || b.user?.email || b.userId}
+                          </span>
+                        </div>
+                        <span
+                          className={`text-sm font-semibold ${
+                            isPositive
+                              ? 'text-success'
+                              : isNegative
+                                ? 'text-error'
+                                : 'text-text-muted'
+                          }`}
+                        >
+                          {b.netBalance > 0 ? '+' : ''}
+                          {formatCurrency(b.netBalance, currency)}
+                        </span>
+                      </div>
+
+                      {/* Pairwise debt detail */}
+                      {(owes.length > 0 || owed.length > 0) && (
+                        <div className="mt-2 ml-12 space-y-1">
+                          {owes.map((item) => (
+                            <p key={item.userId} className="text-xs text-error">
+                              owes{' '}
+                              <span className="font-semibold">
+                                {item.nickName || item.email || item.userId}
+                              </span>{' '}
+                              {formatCurrency(item.amount, currency)}
+                            </p>
+                          ))}
+                          {owed.map((item) => (
+                            <p key={item.userId} className="text-xs text-success">
+                              is owed by{' '}
+                              <span className="font-semibold">
+                                {item.nickName || item.email || item.userId}
+                              </span>{' '}
+                              {formatCurrency(item.amount, currency)}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}

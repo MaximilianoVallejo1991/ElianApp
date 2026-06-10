@@ -26,11 +26,18 @@ import { AppError } from '../utils/errors.js';
  * 2. Verify group is in DYNAMIC mode (throw STATIC_GROUP_BALANCE if STATIC).
  * 3. Fetch all active members, expenses (with splits), and payments.
  * 4. Compute per-user: credits, debits, payments_sent, payments_received.
- * 5. Return sorted by netBalance descending (most owed first).
+ * 5. Compute pairwise debts: owedTo and owedBy arrays per user.
+ * 6. Return sorted by netBalance descending (most owed first).
  *
  * @param {string} groupId
  * @param {string} userId — authenticated user (must be active member)
- * @returns {Promise<Array<{ userId: string, user: { id: string, nickName: string, email: string }, netBalance: number }>>}
+ * @returns {Promise<Array<{
+ *   userId: string,
+ *   user: { id: string, nickName: string, email: string },
+ *   netBalance: number,
+ *   owedTo: Array<{ userId: string, nickName: string, email: string }, amount: number>,
+ *   owedBy: Array<{ userId: string, nickName: string, email: string }, amount: number>
+ * }>>}
  * @throws {AppError} NOT_FOUND | NOT_MEMBER | STATIC_GROUP_BALANCE
  */
 export async function calculateGroupBalances(groupId, userId) {
@@ -135,7 +142,79 @@ export async function calculateGroupBalances(groupId, userId) {
     }
   }
 
-  // 10. Build result array: netBalance = credits - debits - payments_sent + payments_received
+  // 10. Build pairwise debt map from expenses
+  // For each expense split: split user owes payer amount
+  // Only count expenses where both payer and split user are active members
+  const debtGraph = new Map(); // fromUserId -> Map<toUserId, amount>
+
+  for (const expense of expenses) {
+    const payerId = expense.payerId;
+
+    // Skip if payer is not an active member
+    if (!balanceMap.has(payerId)) continue;
+
+    for (const split of expense.splits) {
+      const splitUserId = split.userId;
+
+      // Skip if split user is not an active member
+      if (!balanceMap.has(splitUserId)) continue;
+
+      // Skip self-splits
+      if (payerId === splitUserId) continue;
+
+      // Initialize nested maps if needed
+      if (!debtGraph.has(splitUserId)) {
+        debtGraph.set(splitUserId, new Map());
+      }
+      const toUserDebts = debtGraph.get(splitUserId);
+      if (!toUserDebts.has(payerId)) {
+        toUserDebts.set(payerId, 0);
+      }
+
+      // User in split owes payer amount_owed
+      toUserDebts.set(payerId, toUserDebts.get(payerId) + Number(split.amount));
+    }
+  }
+
+  // 11. Simplify debt graph: net out mutual debts between pairs
+  const pairwiseDebts = new Map(); // userId -> Map<otherUserId, netAmount (positive = owes them)>
+
+  for (const [fromUserId, toDebts] of debtGraph) {
+    for (const [toUserId, amount] of toDebts) {
+      if (amount <= 0) continue;
+
+      // Initialize user's debt map
+      if (!pairwiseDebts.has(fromUserId)) {
+        pairwiseDebts.set(fromUserId, new Map());
+      }
+
+      const userDebts = pairwiseDebts.get(fromUserId);
+      const currentDebt = userDebts.get(toUserId) || 0;
+
+      // If reverse debt exists, net them out
+      const reverseDebt = (pairwiseDebts.get(toUserId)?.get(fromUserId)) || 0;
+
+      if (reverseDebt !== 0) {
+        const netDebt = currentDebt - reverseDebt;
+        // Update fromUser's perspective
+        userDebts.set(toUserId, netDebt);
+        // Clear reverse debt entry
+        if (pairwiseDebts.get(toUserId)) {
+          pairwiseDebts.get(toUserId).set(fromUserId, 0);
+        }
+      } else {
+        userDebts.set(toUserId, currentDebt + amount);
+      }
+    }
+  }
+
+  // 12. Build user lookup map for owedTo/owedBy
+  const userMap = new Map();
+  for (const member of activeMembers) {
+    userMap.set(member.userId, member.user);
+  }
+
+  // 13. Build result array with pairwise debts
   const result = [];
 
   for (const member of activeMembers) {
@@ -143,14 +222,51 @@ export async function calculateGroupBalances(groupId, userId) {
     const netBalance =
       b.credits - b.debits - b.payments_sent + b.payments_received;
 
+    const owedTo = [];
+    const owedBy = [];
+
+    // Process debts where this user owes others (owedTo)
+    const userDebtEntries = pairwiseDebts.get(member.userId);
+    if (userDebtEntries) {
+      for (const [otherUserId, amount] of userDebtEntries) {
+        if (amount > 0) {
+          const otherUser = userMap.get(otherUserId);
+          if (otherUser) {
+            owedTo.push({
+              userId: otherUserId,
+              nickName: otherUser.nickName,
+              email: otherUser.email,
+              amount: Math.round(amount * 100) / 100,
+            });
+          }
+        } else if (amount < 0) {
+          const otherUser = userMap.get(otherUserId);
+          if (otherUser) {
+            owedBy.push({
+              userId: otherUserId,
+              nickName: otherUser.nickName,
+              email: otherUser.email,
+              amount: Math.round(Math.abs(amount) * 100) / 100,
+            });
+          }
+        }
+      }
+    }
+
+    // Sort by amount descending, exclude zero amounts
+    owedTo.sort((a, b) => b.amount - a.amount);
+    owedBy.sort((a, b) => b.amount - a.amount);
+
     result.push({
       userId: member.userId,
       user: member.user,
       netBalance: Math.round(netBalance * 100) / 100,
+      owedTo,
+      owedBy,
     });
   }
 
-  // 11. Sort by netBalance descending (positive first = most owed)
+  // 14. Sort by netBalance descending (positive first = most owed)
   result.sort((a, b) => b.netBalance - a.netBalance);
 
   return result;
