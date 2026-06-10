@@ -203,6 +203,16 @@ export default function LoginPage() {
             Create one
           </Link>
         </p>
+
+        <p className="text-center text-sm text-text-muted">
+          Forgot your password?{' '}
+          <Link
+            to="/forgot-password"
+            className="font-semibold text-secondary underline-offset-2 transition-colors duration-200 hover:text-secondary/80 hover:underline"
+          >
+            Reset it
+          </Link>
+        </p>
       </div>
     </div>
   );

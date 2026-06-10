@@ -225,12 +225,13 @@ export async function removeMember(groupId, targetUserId, requesterId) {
 }
 
 /**
- * Leave a group. Deletes the membership record.
+ * Leave a group. Soft-deletes the membership (sets status to REMOVED).
  * Owners cannot leave — they must transfer ownership or delete the group.
+ * Members with a negative net balance cannot leave until debts are settled.
  *
  * @param {string} groupId
  * @param {string} userId — the user leaving
- * @throws {AppError} NOT_FOUND | CANNOT_LEAVE_GROUP
+ * @throws {AppError} NOT_FOUND | CANNOT_LEAVE_AS_OWNER | CANNOT_LEAVE_WITH_DEBTS
  */
 export async function leaveGroup(groupId, userId) {
   const group = await prisma.group.findUnique({ where: { id: groupId } });
@@ -241,13 +242,13 @@ export async function leaveGroup(groupId, userId) {
 
   if (group.ownerId === userId) {
     throw new AppError(
-      'CANNOT_LEAVE_GROUP',
-      403,
+      'CANNOT_LEAVE_AS_OWNER',
+      400,
       'Owner cannot leave; transfer ownership or delete group',
     );
   }
 
-  // Verify membership exists
+  // Verify membership exists and is ACTIVE
   const membership = await prisma.groupMember.findUnique({
     where: {
       groupId_userId: { groupId, userId },
@@ -258,9 +259,32 @@ export async function leaveGroup(groupId, userId) {
     throw new AppError('NOT_FOUND', 404, 'You are not a member of this group');
   }
 
-  await prisma.groupMember.delete({
+  if (membership.status !== 'ACTIVE') {
+    throw new AppError('NOT_FOUND', 404, 'You are not an active member of this group');
+  }
+
+  // Check net balance — negative balance means member owes money
+  const balances = await prisma.balance.findMany({
+    where: { groupId, userId },
+  });
+
+  const netBalance = balances.reduce((sum, b) => sum + Number(b.netBalance || 0), 0);
+
+  if (netBalance < 0) {
+    throw new AppError(
+      'CANNOT_LEAVE_WITH_DEBTS',
+      400,
+      'Cannot leave group with pending debts; settle first',
+    );
+  }
+
+  // Soft delete: set status to REMOVED instead of hard-deleting
+  await prisma.groupMember.update({
     where: {
       groupId_userId: { groupId, userId },
+    },
+    data: {
+      status: 'REMOVED',
     },
   });
 }

@@ -48,6 +48,9 @@ export const authService = {
 
   getMe: () =>
     api.get('/auth/me'),
+
+  forgotPassword: (email) =>
+    api.post('/auth/forgot-password', { email }),
 };
 
 //
@@ -63,6 +66,12 @@ export const groupService = {
 
   create: (data) =>
     api.post('/groups', data),
+
+  update: (id, data) =>
+    api.put(`/groups/${id}`, data),
+
+  delete: (id) =>
+    api.delete(`/groups/${id}`),
 };
 
 //
@@ -90,7 +99,7 @@ export const expenseService = {
     api.post(`/groups/${groupId}/expenses/${expenseId}/items`, data),
 
   updateItem: (groupId, expenseId, itemId, data) =>
-    api.put(`/groups/${groupId}/expenses/${expenseId}/items/${itemId}`, data),
+    api.patch(`/groups/${groupId}/expenses/${expenseId}/items/${itemId}`, data),
 
   deleteItem: (groupId, expenseId, itemId) =>
     api.delete(`/groups/${groupId}/expenses/${expenseId}/items/${itemId}`),
@@ -124,6 +133,18 @@ export const paymentService = {
 export const balanceService = {
   getBalances: (groupId) =>
     api.get(`/groups/${groupId}/balances`),
+};
+
+//
+// Membership API
+//
+
+export const membershipService = {
+  remove: (groupId, userId) =>
+    api.delete(`/groups/${groupId}/members/${userId}`),
+
+  leave: (groupId) =>
+    api.post(`/groups/${groupId}/leave`),
 };
 
 //

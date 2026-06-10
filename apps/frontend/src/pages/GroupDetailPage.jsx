@@ -15,18 +15,25 @@ import {
   LockOpenIcon,
   ExclamationTriangleIcon,
   CheckCircleIcon,
+  PencilIcon,
+  TrashIcon,
+  ArrowRightStartOnRectangleIcon,
 } from '@heroicons/react/24/outline';
 import {
   groupService,
   balanceService,
   expenseService,
   paymentService,
+  membershipService,
 } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import ExpenseForm from '../components/ExpenseForm';
 import PaymentForm from '../components/PaymentForm';
 import InviteModal from '../components/InviteModal';
 import ItemReportForm from '../components/ItemReportForm';
+import ConfirmDialog from '../components/ConfirmDialog';
+import EditGroupModal from '../components/EditGroupModal';
+import MemberManagementPanel from '../components/MemberManagementPanel';
 
 const BALANCE_MODE_LABELS = {
   DYNAMIC: 'Dynamic',
@@ -80,6 +87,15 @@ export default function GroupDetailPage() {
 
   // Item reporting modal state for COLLECTIVE expenses
   const [showItemModalFor, setShowItemModalFor] = useState(null);
+
+  // Edit/Delete modal state
+  const [showEditGroup, setShowEditGroup] = useState(false);
+  const [showDeleteGroupConfirm, setShowDeleteGroupConfirm] = useState(false);
+  const [editingExpense, setEditingExpense] = useState(null);
+  const [deletingExpenseId, setDeletingExpenseId] = useState(null);
+  const [deletingPaymentId, setDeletingPaymentId] = useState(null);
+  const [showLeaveGroupConfirm, setShowLeaveGroupConfirm] = useState(false);
+  const [showMemberManagement, setShowMemberManagement] = useState(false);
 
   // Pagination state for expenses
   const [expenses, setExpenses] = useState([]);
@@ -150,6 +166,72 @@ export default function GroupDetailPage() {
       setExpensesLoading(false);
     }
   }, [id, expensePage, expenseLimit]);
+
+  // ---- Expense edit/delete handlers ----
+
+  const handleEditExpense = (expense) => {
+    setEditingExpense(expense);
+    setShowExpenseForm(true);
+  };
+
+  const handleDeleteExpense = async () => {
+    if (!deletingExpenseId) return;
+    try {
+      await expenseService.delete(id, deletingExpenseId);
+      setExpenses((prev) => prev.filter((e) => e.id !== deletingExpenseId));
+    } catch (err) {
+      alert(err.message || 'Failed to delete expense.');
+    } finally {
+      setDeletingExpenseId(null);
+    }
+  };
+
+  // ---- Payment delete handlers ----
+
+  const handleDeletePayment = async () => {
+    if (!deletingPaymentId) return;
+    try {
+      await paymentService.delete(id, deletingPaymentId);
+      setPayments((prev) => prev.filter((p) => p.id !== deletingPaymentId));
+    } catch (err) {
+      alert(err.message || 'Failed to delete payment.');
+    } finally {
+      setDeletingPaymentId(null);
+    }
+  };
+
+  // ---- Member management handlers ----
+
+  const handleRemoveMember = async (userId) => {
+    await membershipService.remove(id, userId);
+    loadGroup();
+  };
+
+  // ---- Leave group handlers ----
+
+  const handleLeaveGroup = async () => {
+    try {
+      await membershipService.leave(id);
+      navigate('/groups', { replace: true });
+    } catch (err) {
+      alert(err.message || 'Failed to leave group.');
+    } finally {
+      setShowLeaveGroupConfirm(false);
+    }
+  };
+
+  // ---- Delete group handlers ----
+
+  const handleDeleteGroup = async () => {
+    try {
+      await groupService.delete(id);
+      navigate('/groups', { replace: true });
+    } catch (err) {
+      alert(err.message || 'Failed to delete group.');
+    } finally {
+      setShowDeleteGroupConfirm(false);
+    }
+  };
 
   const handleLoadMorePayments = useCallback(async () => {
     setPaymentsLoading(true);
@@ -341,13 +423,49 @@ export default function GroupDetailPage() {
                 Record payment
               </button>
               {group.ownerId === currentUserId && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowMemberManagement(true)}
+                    className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-border bg-white px-4 py-3 font-heading text-sm font-semibold text-text-muted transition-all duration-200 hover:bg-border/50 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2 sm:w-auto"
+                  >
+                    <UserGroupIcon className="h-5 w-5" aria-hidden="true" />
+                    Members
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowEditGroup(true)}
+                    className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-secondary bg-white px-4 py-3 font-heading text-sm font-semibold text-secondary transition-all duration-200 hover:bg-secondary/5 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2 sm:w-auto"
+                  >
+                    <PencilIcon className="h-5 w-5" aria-hidden="true" />
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowInviteModal(true)}
+                    className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-secondary bg-white px-5 py-3 font-heading text-sm font-semibold text-secondary transition-all duration-200 hover:bg-secondary/5 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2 sm:w-auto"
+                  >
+                    <UserGroupIcon className="h-5 w-5" aria-hidden="true" />
+                    Invite
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteGroupConfirm(true)}
+                    className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-error bg-white px-4 py-3 font-heading text-sm font-semibold text-error transition-all duration-200 hover:bg-error/5 focus:outline-none focus:ring-2 focus:ring-error focus:ring-offset-2 sm:w-auto"
+                  >
+                    <TrashIcon className="h-5 w-5" aria-hidden="true" />
+                    Delete
+                  </button>
+                </>
+              )}
+              {group.ownerId !== currentUserId && (
                 <button
                   type="button"
-                  onClick={() => setShowInviteModal(true)}
-                  className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-secondary bg-white px-5 py-3 font-heading text-sm font-semibold text-secondary transition-all duration-200 hover:bg-secondary/5 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2 sm:w-auto"
+                  onClick={() => setShowLeaveGroupConfirm(true)}
+                  className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-cta bg-white px-5 py-3 font-heading text-sm font-semibold text-cta transition-all duration-200 hover:bg-cta/5 focus:outline-none focus:ring-2 focus:ring-cta focus:ring-offset-2 sm:w-auto"
                 >
-                  <UserGroupIcon className="h-5 w-5" aria-hidden="true" />
-                  Invite
+                  <ArrowRightStartOnRectangleIcon className="h-5 w-5" aria-hidden="true" />
+                  Leave group
                 </button>
               )}
             </div>
@@ -518,6 +636,9 @@ export default function GroupDetailPage() {
                 const hasReported = !!userItem;
                 const isParticipant = (expense.participantIds || []).includes(currentUserId);
                 const isCreator = expense.payerId === currentUserId || expense.createdById === currentUserId;
+                const isGroupOwner = group.ownerId === currentUserId;
+                const canEditExpense = isCreator;
+                const canDeleteExpense = isCreator || isGroupOwner;
                 const isPending = expense.status === 'PENDING';
                 const isMismatch = expense.status === 'MISMATCH';
                 const isLocked = expense.isLocked === true;
@@ -571,9 +692,33 @@ export default function GroupDetailPage() {
                           <span className="text-text-muted">{formatDate(expense.date || expense.createdAt)}</span>
                         </div>
                       </div>
-                      <span className="flex-shrink-0 font-heading text-lg font-bold text-primary">
-                        {formatCurrency(expense.amount, currency)}
-                      </span>
+                      <div className="flex flex-shrink-0 flex-col items-end gap-1">
+                        <span className="font-heading text-lg font-bold text-primary">
+                          {formatCurrency(expense.amount, currency)}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          {canEditExpense && (
+                            <button
+                              type="button"
+                              onClick={() => handleEditExpense(expense)}
+                              className="cursor-pointer rounded px-1.5 py-0.5 text-xs text-secondary transition-colors duration-200 hover:bg-secondary/10 focus:outline-none focus:ring-2 focus:ring-secondary/30"
+                              aria-label="Edit expense"
+                            >
+                              <PencilIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                            </button>
+                          )}
+                          {canDeleteExpense && (
+                            <button
+                              type="button"
+                              onClick={() => setDeletingExpenseId(expense.id)}
+                              className="cursor-pointer rounded px-1.5 py-0.5 text-xs text-error transition-colors duration-200 hover:bg-error/10 focus:outline-none focus:ring-2 focus:ring-error/30"
+                              aria-label="Delete expense"
+                            >
+                              <TrashIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     </div>
 
                     {/* COLLECTIVE: Meta info */}
@@ -778,7 +923,12 @@ export default function GroupDetailPage() {
           ) : (<>
             <div className="mt-4 rounded-xl border border-border bg-white">
               <ul className="divide-y divide-border">
-                {payments.map((payment) => (
+                {payments.map((payment) => {
+                  const isSender = payment.fromUserId === currentUserId;
+                  const isGroupOwner = group.ownerId === currentUserId;
+                  const canDeletePayment = isSender || isGroupOwner;
+
+                  return (
                   <li
                     key={payment.id}
                     className="flex items-center justify-between px-5 py-4 first:rounded-t-xl last:rounded-b-xl"
@@ -803,11 +953,24 @@ export default function GroupDetailPage() {
                         </p>
                       </div>
                     </div>
-                    <span className="flex-shrink-0 font-heading text-sm font-bold text-cta">
-                      {formatCurrency(payment.amount, currency)}
-                    </span>
+                    <div className="flex flex-shrink-0 items-center gap-2">
+                      <span className="font-heading text-sm font-bold text-cta">
+                        {formatCurrency(payment.amount, currency)}
+                      </span>
+                      {canDeletePayment && (
+                        <button
+                          type="button"
+                          onClick={() => setDeletingPaymentId(payment.id)}
+                          className="cursor-pointer rounded p-1 text-text-muted transition-colors duration-200 hover:bg-error/10 hover:text-error focus:outline-none focus:ring-2 focus:ring-error/30"
+                          aria-label="Delete payment"
+                        >
+                          <TrashIcon className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      )}
+                    </div>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             </div>
             {hasMorePayments && (
@@ -835,8 +998,13 @@ export default function GroupDetailPage() {
           members={members}
           currency={currency}
           currentUserId={currentUserId}
+          editMode={!!editingExpense}
+          initialData={editingExpense}
           onSuccess={loadGroup}
-          onClose={() => setShowExpenseForm(false)}
+          onClose={() => {
+            setShowExpenseForm(false);
+            setEditingExpense(null);
+          }}
         />
       )}
 
@@ -855,6 +1023,79 @@ export default function GroupDetailPage() {
         <InviteModal
           groupId={id}
           onClose={() => setShowInviteModal(false)}
+        />
+      )}
+
+      {showEditGroup && (
+        <EditGroupModal
+          group={group}
+          onSuccess={() => {
+            loadGroup();
+            setShowEditGroup(false);
+          }}
+          onClose={() => setShowEditGroup(false)}
+        />
+      )}
+
+      {showMemberManagement && (
+        <MemberManagementPanel
+          groupId={id}
+          members={members}
+          ownerId={group.ownerId}
+          currentUserId={currentUserId}
+          onRemoveMember={handleRemoveMember}
+          onClose={() => setShowMemberManagement(false)}
+        />
+      )}
+
+      {/* Delete expense confirmation */}
+      {deletingExpenseId && (
+        <ConfirmDialog
+          title="Delete expense"
+          message="Are you sure you want to delete this expense? This action cannot be undone."
+          confirmLabel="Delete"
+          variant="danger"
+          onConfirm={handleDeleteExpense}
+          onClose={() => setDeletingExpenseId(null)}
+        />
+      )}
+
+      {/* Delete payment confirmation */}
+      {deletingPaymentId && (
+        <ConfirmDialog
+          title="Delete payment"
+          message="Are you sure you want to delete this payment? Balances will be recalculated."
+          confirmLabel="Delete"
+          variant="danger"
+          onConfirm={handleDeletePayment}
+          onClose={() => setDeletingPaymentId(null)}
+        />
+      )}
+
+      {/* Leave group confirmation */}
+      {showLeaveGroupConfirm && (
+        <ConfirmDialog
+          title="Leave group"
+          message="Are you sure you want to leave this group? You will no longer see it in your groups list."
+          confirmLabel="Leave"
+          variant="warning"
+          onConfirm={handleLeaveGroup}
+          onClose={() => setShowLeaveGroupConfirm(false)}
+        />
+      )}
+
+      {/* Delete group confirmation */}
+      {showDeleteGroupConfirm && (
+        <ConfirmDialog
+          title="Delete group"
+          message={expenses.length > 0
+            ? `This group has ${expenses.length} expense${expenses.length !== 1 ? 's' : ''}. Deleting the group will also delete all associated data. This action cannot be undone.`
+            : 'Are you sure you want to delete this group? This action cannot be undone.'}
+          warning={expenses.length > 0 ? 'All expenses, payments, and member data will be permanently deleted.' : undefined}
+          confirmLabel="Delete group"
+          variant="danger"
+          onConfirm={handleDeleteGroup}
+          onClose={() => setShowDeleteGroupConfirm(false)}
         />
       )}
     </div>

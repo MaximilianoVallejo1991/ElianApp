@@ -16,23 +16,25 @@ const SPLIT_TYPES = [
 ];
 
 /**
- * ExpenseForm — modal form to create a new expense in a group.
+ * ExpenseForm — modal form to create or edit an expense in a group.
  *
  * Unified wizard:
  *   Step 1 (all types): description, amount, date, category, payer, split type.
  *   Step 2 (type-specific):
- *     - EQUAL: computed equal shares (read-only), Create button.
+ *     - EQUAL: computed equal shares (read-only), Create/Update button.
  *     - PERCENTAGE: percentage inputs per member with sum=100 % validation.
  *     - COLLECTIVE: 2a) shared costs + participant selection,
- *                   2b) confirmation summary, Create button.
+ *                   2b) confirmation summary, Create/Update button.
  *
  * Props:
  *   groupId      — the group ID (string)
  *   members      — array of ACTIVE group members (each with userId + user object)
  *   currency     — group currency (e.g. "USD")
  *   currentUserId — authenticated user ID, pre-selected as payer
- *   onSuccess    — callback after successful creation
+ *   onSuccess    — callback after successful creation/update
  *   onClose      — close the modal
+ *   editMode     — (optional) boolean, true for edit mode
+ *   initialData  — (optional) expense object to pre-fill in edit mode
  */
 export default function ExpenseForm({
   groupId,
@@ -41,6 +43,8 @@ export default function ExpenseForm({
   currentUserId,
   onSuccess,
   onClose,
+  editMode = false,
+  initialData = null,
 }) {
   // ------------------------------------------------------------------
   // Base form state (Step 1)
@@ -116,6 +120,30 @@ export default function ExpenseForm({
       setSelectedParticipantIds(members.map((m) => m.userId));
     }
   }, [splitType, members]);
+
+  // Pre-fill form fields when in edit mode
+  useEffect(() => {
+    if (!editMode || !initialData) return;
+
+    setDescription(initialData.description || '');
+    setAmount(String(initialData.amount || ''));
+    setCategory(initialData.category || 'FOOD');
+    setPayerId(initialData.payerId || currentUserId || '');
+    setSplitType(initialData.splitType || 'EQUAL');
+    setDate(
+      initialData.date
+        ? new Date(initialData.date).toLocaleDateString('en-CA')
+        : new Date().toLocaleDateString('en-CA'),
+    );
+
+    if (initialData.splitType === 'COLLECTIVE') {
+      setSharedCosts(String(initialData.sharedCosts || ''));
+      setSelectedParticipantIds(initialData.participantIds || members.map((m) => m.userId));
+      setCollSubStep('configure');
+    } else {
+      setSelectedParticipantIds(initialData.participantIds || members.map((m) => m.userId));
+    }
+  }, [editMode, initialData, members, currentUserId]);
 
   // ------------------------------------------------------------------
   // Split input handlers
@@ -253,7 +281,11 @@ const validateStep2 = () => {
           ...(date && { date: new Date(date).toISOString() }),
         };
 
-        await expenseService.create(groupId, payload);
+        if (editMode && initialData?.id) {
+          await expenseService.update(groupId, initialData.id, payload);
+        } else {
+          await expenseService.create(groupId, payload);
+        }
       } else {
         const payload = {
           amount: parsedAmount,
@@ -272,14 +304,18 @@ const validateStep2 = () => {
                 })),
         };
 
-        await expenseService.create(groupId, payload);
+        if (editMode && initialData?.id) {
+          await expenseService.update(groupId, initialData.id, payload);
+        } else {
+          await expenseService.create(groupId, payload);
+        }
       }
 
       setLoading(false);
       onSuccess?.();
       onClose?.();
     } catch (err) {
-      setError(err.message || 'Failed to create expense.');
+      setError(err.message || (editMode ? 'Failed to update expense.' : 'Failed to create expense.'));
       setLoading(false);
     }
   };
@@ -332,7 +368,7 @@ const validateStep2 = () => {
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
           <h2 className="font-heading text-xl font-bold text-primary">
-            Add expense
+            {editMode ? 'Edit expense' : 'Add expense'}
           </h2>
           <button
             type="button"
@@ -805,10 +841,10 @@ const validateStep2 = () => {
                           {loading ? (
                             <>
                               <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                              Creating…
+                              {editMode ? 'Saving…' : 'Creating…'}
                             </>
                           ) : (
-                            'Create expense'
+                            editMode ? 'Save changes' : 'Create expense'
                           )}
                         </button>
                       </div>
@@ -836,10 +872,10 @@ const validateStep2 = () => {
                     {loading ? (
                       <>
                         <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                        Saving…
+                        {editMode ? 'Saving…' : 'Creating…'}
                       </>
                     ) : (
-                      'Add expense'
+                      editMode ? 'Save changes' : 'Add expense'
                     )}
                   </button>
                 </div>

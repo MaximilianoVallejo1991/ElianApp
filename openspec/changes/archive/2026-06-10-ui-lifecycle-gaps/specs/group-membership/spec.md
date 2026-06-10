@@ -1,70 +1,6 @@
-# Group Membership Specification
+# Delta for Group Membership
 
-## Purpose
-
-Handles group membership lifecycle: invite users, accept/reject invitations, remove members, and leave groups.
-
-## Requirements
-
-### Requirement: Invite User to Group
-
-The system MUST allow only the group owner to invite users by email or nickName. The system MUST reject invites for already-member users. The system MUST reject invites for non-existent users. The system SHALL create a pending membership record.
-
-#### Scenario: Owner invites by email
-
-- GIVEN authenticated user is owner of group 1, user `bob@example.com` exists but is not a member
-- WHEN owner submits `POST /groups/1/members` with `{ email: "bob@example.com" }`
-- THEN system creates pending membership and returns HTTP 201 with `{ userId, groupId, status: "PENDING" }`
-
-#### Scenario: Owner invites by nickName
-
-- GIVEN authenticated user is owner of group 1, user with nickName `bob` exists but is not a member
-- WHEN owner submits `POST /groups/1/members` with `{ nickName: "bob" }`
-- THEN system creates pending membership and returns HTTP 201
-
-#### Scenario: Invite existing member
-
-- GIVEN authenticated user is owner of group 1, user `bob@example.com` is already a member
-- WHEN owner submits `POST /groups/1/members` with `{ email: "bob@example.com" }`
-- THEN system returns HTTP 400 with `{ error: "User is already a member", code: "ALREADY_MEMBER" }`
-
-#### Scenario: Invite non-existent user
-
-- GIVEN authenticated user is owner of group 1, no user with email `nonexistent@example.com` exists
-- WHEN owner submits `POST /groups/1/members` with `{ email: "nonexistent@example.com" }`
-- THEN system returns HTTP 404 with `{ error: "User not found", code: "USER_NOT_FOUND" }`
-
-#### Scenario: Non-owner invites
-
-- GIVEN authenticated user is member (not owner) of group 1
-- WHEN user submits `POST /groups/1/members` with `{ email: "bob@example.com" }`
-- THEN system returns HTTP 403 with `{ error: "Only owner can invite members", code: "FORBIDDEN" }`
-
-### Requirement: Accept Invitation
-
-The system MUST allow invited user to accept invitation. The system SHALL update membership status to ACTIVE and set joinedAt timestamp.
-
-#### Scenario: Accept invitation
-
-- GIVEN user with id 2 has pending membership in group 1
-- WHEN user submits `POST /groups/1/members/accept`
-- THEN system updates membership to ACTIVE and returns HTTP 200
-
-### Requirement: Reject Invitation
-
-The system MUST allow invited user to reject an invitation. The system MUST hard-delete the membership record when a user rejects — it disappears forever. The frontend MUST show a confirmation dialog before rejection. The frontend MUST call `DELETE /groups/:groupId/members/:memberId/invitation` (or equivalent reject endpoint).
-
-#### Scenario: User rejects invitation
-
-- GIVEN user 2 has a PENDING invitation to group 1
-- WHEN user 2 clicks "Reject", confirmation dialog appears, user confirms
-- THEN frontend calls the reject endpoint, backend hard-deletes the membership record, returns HTTP 200
-
-#### Scenario: Rejected invitation disappears completely
-
-- GIVEN user 2 has rejected the invitation to group 1 (membership hard-deleted)
-- WHEN user 2 views their pending invitations
-- THEN invitation to group 1 is no longer listed
+## MODIFIED Requirements
 
 ### Requirement: Remove Member from Group
 
@@ -167,3 +103,21 @@ The system MUST allow any member (except owner) to leave the group. The frontend
 - GIVEN user 2 left group 1 (status REMOVED), owner sends invite to user 2
 - WHEN user 2 accepts the invitation
 - THEN membership status changes from REMOVED to ACTIVE, ALL user 2's historical expenses, payments, and debts reappear
+
+## ADDED Requirements
+
+### Requirement: Reject Invitation
+
+The system MUST hard-delete the membership record when a user rejects a group invitation. The system MUST NOT preserve the membership record — it disappears forever. The frontend MUST show a confirmation dialog before rejection. The frontend MUST call `DELETE /groups/:groupId/members/:memberId/invitation` (or equivalent reject endpoint).
+
+#### Scenario: User rejects invitation
+
+- GIVEN user 2 has a PENDING invitation to group 1
+- WHEN user 2 clicks "Reject", confirmation dialog appears, user confirms
+- THEN frontend calls the reject endpoint, backend hard-deletes the membership record, returns HTTP 200
+
+#### Scenario: Rejected invitation disappears completely
+
+- GIVEN user 2 has rejected the invitation to group 1 (membership hard-deleted)
+- WHEN user 2 views their pending invitations
+- THEN invitation to group 1 is no longer listed

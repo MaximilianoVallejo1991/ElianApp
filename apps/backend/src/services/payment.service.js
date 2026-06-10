@@ -209,12 +209,21 @@ export async function deletePayment(paymentId, userId) {
     throw new AppError('PAYMENT_NOT_FOUND', 404, 'Payment not found');
   }
 
-  // Only the sender can delete
-  if (payment.fromUserId !== userId) {
+  // Fetch group to check ownerId
+  const group = await prisma.group.findUnique({
+    where: { id: payment.groupId },
+    select: { ownerId: true },
+  });
+
+  // Sender or group owner can delete
+  const isSender = payment.fromUserId === userId;
+  const isGroupOwner = group?.ownerId === userId;
+
+  if (!isSender && !isGroupOwner) {
     throw new AppError(
       'FORBIDDEN',
       403,
-      'Only the sender can delete this payment',
+      'Only sender or group owner can delete this payment',
     );
   }
 

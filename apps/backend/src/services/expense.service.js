@@ -559,12 +559,21 @@ export async function deleteExpense(expenseId, userId) {
     throw new AppError('EXPENSE_NOT_FOUND', 404, 'Expense not found');
   }
 
-  // Ownership: only payer or creator can delete
-  if (expense.payerId !== userId && expense.createdById !== userId) {
+  // Fetch group to check ownerId
+  const group = await prisma.group.findUnique({
+    where: { id: expense.groupId },
+    select: { ownerId: true },
+  });
+
+  // Ownership: creator or group owner can delete
+  const isCreator = expense.createdById === userId;
+  const isGroupOwner = group?.ownerId === userId;
+
+  if (!isCreator && !isGroupOwner) {
     throw new AppError(
       'FORBIDDEN',
       403,
-      'Only payer or creator can delete this expense',
+      'Only creator or group owner can delete this expense',
     );
   }
 
