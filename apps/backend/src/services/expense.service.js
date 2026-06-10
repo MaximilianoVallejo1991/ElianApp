@@ -52,24 +52,53 @@ async function requireActiveMember(groupId, userId) {
  * @param {'EQUAL'|'PERCENTAGE'} splitType
  * @param {Array<{ userId: string, amount?: number, percentage?: number }>} splits
  * @param {string} groupId — needed to fetch active members for EQUAL splits
+ * @param {string[]} [participantIds] — optional list of specific participant IDs
  * @returns {Promise<Array<{ userId: string, amount: number, percentage?: number }>>}
  */
-async function computeSplits(totalAmount, splitType, splits, groupId) {
+async function computeSplits(totalAmount, splitType, splits, groupId, participantIds) {
   validateSplits(totalAmount, splitType, splits);
 
   if (splitType === 'EQUAL') {
-    // Fetch active members for computing equal shares
-    const activeMembers = await prisma.groupMember.findMany({
-      where: { groupId, status: 'ACTIVE' },
-      select: { userId: true },
-    });
+    let memberIds;
 
-    const memberIds = activeMembers.map((m) => m.userId);
+    if (participantIds && participantIds.length > 0) {
+      // Use the provided participant IDs directly
+      memberIds = participantIds;
+    } else {
+      // Fall back to fetching all active members
+      const activeMembers = await prisma.groupMember.findMany({
+        where: { groupId, status: 'ACTIVE' },
+        select: { userId: true },
+      });
+      memberIds = activeMembers.map((m) => m.userId);
+    }
+
     return calculateEqualSplits(totalAmount, memberIds);
   }
 
   if (splitType === 'PERCENTAGE') {
-    return calculatePercentageSplits(totalAmount, splits);
+    let filteredSplits = splits;
+
+    // If participantIds provided, filter splits to only those participants
+    if (participantIds && participantIds.length > 0) {
+      const participantSet = new Set(participantIds);
+      filteredSplits = splits.filter((s) => participantSet.has(s.userId));
+
+      // Validate all remaining split userIds are active group members
+      const activeMembers = await prisma.groupMember.findMany({
+        where: { groupId, status: 'ACTIVE' },
+        select: { userId: true },
+      });
+      const activeMemberSet = new Set(activeMembers.map((m) => m.userId));
+
+      for (const split of filteredSplits) {
+        if (!activeMemberSet.has(split.userId)) {
+          throw new AppError('INVALID_PARTICIPANTS', 400, `User ${split.userId} is not an active group member`);
+        }
+      }
+    }
+
+    return calculatePercentageSplits(totalAmount, filteredSplits);
   }
 
   throw new AppError('INVALID_SPLITS', 400, 'Unknown split type');
@@ -240,6 +269,7 @@ export async function createExpense(groupId, data, userId) {
     data.splitType,
     data.splits,
     groupId,
+    data.participantIds,
   );
 
   // 5. Create expense with splits in a single Prisma call
@@ -317,6 +347,13 @@ export async function listExpenses(groupId, userId, { limit, offset } = {}) {
         },
         createdBy: {
           select: { id: true, email: true, nickName: true },
+        },
+        items: {
+          include: {
+            user: {
+              select: { id: true, email: true, nickName: true },
+            },
+          },
         },
       },
       orderBy: { createdAt: 'desc' },

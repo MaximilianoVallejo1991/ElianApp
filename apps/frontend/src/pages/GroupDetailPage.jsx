@@ -248,7 +248,7 @@ export default function GroupDetailPage() {
         0
       );
       const discrepancy = Math.abs(
-        itemsSum + Number(expense.sharedCosts) - Number(expense.total)
+        itemsSum + Number(expense.sharedCosts) - Number(expense.amount)
       );
       return (
         <span className="inline-flex items-center gap-1 rounded-full bg-error/10 px-2.5 py-0.5 text-xs font-semibold text-error">
@@ -579,8 +579,8 @@ export default function GroupDetailPage() {
                       </div>
                     )}
 
-                    {/* COLLECTIVE: PENDING status - show unreported + add item form */}
-                    {isCollective && isPending && !isLocked && (
+                    {/* COLLECTIVE: PENDING/MISMATCH status - show unreported + add item form */}
+                    {isCollective && (isPending || isMismatch) && !isLocked && (
                       <div className="mt-3">
                         {unreportedIds.length > 0 && (
                           <p className="mb-2 text-xs text-text-muted">
@@ -629,8 +629,8 @@ export default function GroupDetailPage() {
                       </div>
                     )}
 
-                    {/* COLLECTIVE: Locked notice for PENDING participants without item */}
-                    {isCollective && isPending && isLocked && isParticipant && !hasReported && (
+                    {/* COLLECTIVE: Locked notice for participants without item */}
+                    {isCollective && (isPending || isMismatch) && isLocked && isParticipant && !hasReported && (
                       <div className="mt-3 rounded-md bg-cta/5 px-3 py-2 text-xs text-cta">
                         This expense is locked. The creator must unlock it before you can report.
                       </div>

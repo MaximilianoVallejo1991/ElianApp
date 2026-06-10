@@ -4,6 +4,7 @@ import {
   CurrencyDollarIcon,
   UserIcon,
 } from '@heroicons/react/24/outline';
+import { NumericFormat } from 'react-number-format';
 import { expenseService } from '../services/api';
 
 const CATEGORIES = ['FOOD', 'TRANSPORT', 'HOUSING', 'ENTERTAINMENT', 'OTHER'];
@@ -50,7 +51,7 @@ export default function ExpenseForm({
   const [payerId, setPayerId] = useState(currentUserId || '');
   const [splitType, setSplitType] = useState('EQUAL');
   const [splits, setSplits] = useState([]);
-  const [date, setDate] = useState('');
+  const [date, setDate] = useState(new Date().toLocaleDateString('en-CA'));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -75,9 +76,9 @@ export default function ExpenseForm({
   const parsedAmount = parseFloat(amount) || 0;
 
   const equalShare = useMemo(() => {
-    if (members.length === 0) return 0;
-    return Math.round((parsedAmount / members.length) * 100) / 100;
-  }, [parsedAmount, members.length]);
+    if (selectedParticipantIds.length === 0) return 0;
+    return Math.round((parsedAmount / selectedParticipantIds.length) * 100) / 100;
+  }, [parsedAmount, selectedParticipantIds.length]);
 
   /** Sum of split percentages (client-side preview only). */
   const percentageSum = useMemo(() => {
@@ -90,14 +91,17 @@ export default function ExpenseForm({
       setSplits([]);
       return;
     }
+    // PERCENTAGE: only initialize splits for selected participants
     setSplits(
-      members.map((m) => ({
-        userId: m.userId,
-        amount: '',
-        percentage: '',
-      })),
+      members
+        .filter((m) => selectedParticipantIds.includes(m.userId))
+        .map((m) => ({
+          userId: m.userId,
+          amount: '',
+          percentage: '',
+        })),
     );
-  }, [splitType, members]);
+  }, [splitType, members, selectedParticipantIds]);
 
   // Reset wizard + COLLECTIVE state when splitType changes
   useEffect(() => {
@@ -107,6 +111,9 @@ export default function ExpenseForm({
       setSharedCosts('');
       setSelectedParticipantIds(members.map((m) => m.userId));
       setCollSubStep('configure');
+    } else {
+      // EQUAL and PERCENTAGE: initialize participants to all members
+      setSelectedParticipantIds(members.map((m) => m.userId));
     }
   }, [splitType, members]);
 
@@ -153,13 +160,19 @@ export default function ExpenseForm({
     return null;
   };
 
-  const validateStep2 = () => {
+const validateStep2 = () => {
+    if (splitType === 'EQUAL') {
+      if (selectedParticipantIds.length === 0) return 'Select at least one participant.';
+      return null;
+    }
+
     if (splitType === 'PERCENTAGE') {
+      if (selectedParticipantIds.length === 0) return 'Select at least one participant.';
       if (Math.abs(percentageSum - 100) > 0.009) {
         return 'Split percentages must sum to 100%.';
       }
       if (splits.some((s) => !s.percentage || parseFloat(s.percentage) <= 0)) {
-        return 'Each member must have a positive percentage.';
+        return 'Each participant must have a positive percentage.';
       }
     }
 
@@ -248,10 +261,11 @@ export default function ExpenseForm({
           category,
           payerId,
           splitType,
+          participantIds: selectedParticipantIds,
           ...(date && { date: new Date(date).toISOString() }),
           splits:
             splitType === 'EQUAL'
-              ? [{ userId: members[0]?.userId || '' }] // dummy — backend computes equal share from active members
+              ? selectedParticipantIds.map((uid) => ({ userId: uid }))
               : splits.map((s) => ({
                   userId: s.userId,
                   percentage: parseFloat(s.percentage),
@@ -289,7 +303,7 @@ export default function ExpenseForm({
 
   /** Whether the step 2 action (Create) is available. */
   const canCreate = () => {
-    if (splitType === 'EQUAL') return true;
+    if (splitType === 'EQUAL') return selectedParticipantIds.length > 0;
     if (splitType === 'PERCENTAGE') {
       return Math.abs(percentageSum - 100) <= 0.009
         && !splits.some((s) => !s.percentage || parseFloat(s.percentage) <= 0);
@@ -374,16 +388,17 @@ export default function ExpenseForm({
                     className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-text-muted"
                     aria-hidden="true"
                   />
-                  <input
+                  <NumericFormat
                     id="expense-amount"
-                    type="number"
                     required
-                    min="0.01"
-                    step="0.01"
                     value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
+                    onValueChange={(values) => setAmount(values.floatValue ?? '')}
+                    thousandSeparator=","
+                    decimalScale={2}
+                    fixedDecimalScale
+                    allowNegative={false}
                     placeholder="0.00"
-                    className="w-full rounded-lg border border-border bg-white py-3 pl-10 pr-16 text-text transition-colors duration-200 placeholder:text-text-muted/50 focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary/20"
+                    className="w-full rounded-lg border border-border bg-white py-3 pl-10 pr-16 text-text transition-colors duration-200 placeholder:text-text-muted/50 focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary/20 [!&::-webkit-outer-spin-button]:appearance-none [&_input[type=number]]:-moz-appearance:textfield [&_input[type=number]]::outer-spin-button:appearance-none [&_input[type=number]]::inner-spin-button:appearance-none"
                   />
                   <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-text-muted">
                     {currency}
@@ -490,13 +505,58 @@ export default function ExpenseForm({
           {/* ================================================================ */}
           {wizardStep === 2 && (
             <>
+              {/* Participants — shown for EQUAL and PERCENTAGE */}
+              {(splitType === 'EQUAL' || splitType === 'PERCENTAGE') && (
+                <div className="rounded-lg border border-border bg-background p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-text">Participants</p>
+                    <button
+                      type="button"
+                      onClick={toggleAllCollectiveParticipants}
+                      className="cursor-pointer rounded px-1.5 py-0.5 text-xs font-medium text-secondary transition-colors duration-200 hover:text-secondary/80 focus:outline-none focus:ring-2 focus:ring-secondary/30"
+                    >
+                      {selectedParticipantIds.length === members.length ? 'Deselect all' : 'Select all'}
+                    </button>
+                  </div>
+                  <div className="max-h-48 space-y-1 overflow-y-auto">
+                    {members.map((m) => {
+                      const checked = selectedParticipantIds.includes(m.userId);
+                      return (
+                        <label
+                          key={m.userId}
+                          className={`flex cursor-pointer items-center gap-3 rounded-md px-3 py-2.5 transition-colors duration-150 ${
+                            checked ? 'bg-secondary/5' : 'hover:bg-border/30'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleCollectiveParticipant(m.userId)}
+                            className="h-4 w-4 cursor-pointer rounded border-border text-secondary focus:ring-2 focus:ring-secondary/20"
+                          />
+                          <span className="truncate text-sm font-medium text-text">
+                            {memberName(m)}
+                            {m.userId === currentUserId ? ' (you)' : ''}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {selectedParticipantIds.length > 0 && (
+                    <p className="text-xs text-text-muted">
+                      {selectedParticipantIds.length} participant{selectedParticipantIds.length !== 1 ? 's' : ''} selected
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* --- EQUAL: computed equal shares --- */}
-              {splitType === 'EQUAL' && parsedAmount > 0 && (
+              {splitType === 'EQUAL' && parsedAmount > 0 && selectedParticipantIds.length > 0 && (
                 <div className="rounded-lg bg-secondary/5 px-4 py-3">
                   <p className="text-sm text-text">
                     Split equally among{' '}
-                    <span className="font-semibold text-secondary">{members.length}</span>{' '}
-                    member{members.length !== 1 ? 's' : ''}
+                    <span className="font-semibold text-secondary">{selectedParticipantIds.length}</span>{' '}
+                    participant{selectedParticipantIds.length !== 1 ? 's' : ''}
                   </p>
                   <p className="mt-1 text-sm font-semibold text-primary">
                     {formatCurrency(equalShare)} each
@@ -519,31 +579,34 @@ export default function ExpenseForm({
                       Total: {percentageSum}%
                     </p>
                   </div>
-                  {members.map((m, i) => (
-                    <div key={m.userId} className="flex items-center gap-3">
-                      <div className="flex min-w-0 flex-1 items-center gap-2">
-                        <UserIcon className="h-4 w-4 flex-shrink-0 text-text-muted" aria-hidden="true" />
-                        <span className="truncate text-sm text-text">
-                          {memberName(m)}
-                        </span>
+                  {members
+                    .filter((m) => selectedParticipantIds.includes(m.userId))
+                    .map((m, i) => (
+                      <div key={m.userId} className="flex items-center gap-3">
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          <UserIcon className="h-4 w-4 flex-shrink-0 text-text-muted" aria-hidden="true" />
+                          <span className="truncate text-sm text-text">
+                            {memberName(m)}
+                          </span>
+                        </div>
+                        <div className="relative w-28 flex-shrink-0">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            placeholder="0"
+                            value={splits[i]?.percentage || ''}
+                            onChange={(e) => handleSplitChange(i, 'percentage', e.target.value)}
+                            className="w-full rounded-lg border border-border bg-white py-2 pl-3 pr-8 text-right text-sm text-text transition-colors duration-200 placeholder:text-text-muted/50 focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary/20 [!&::-webkit-outer-spin-button]:appearance-none [&_input[type=number]]:-moz-appearance:textfield [&_input[type=number]]::outer-spin-button:appearance-none [&_input[type=number]]::inner-spin-button:appearance-none"
+                          />
+                          <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-text-muted">
+                            %
+                          </span>
+                        </div>
                       </div>
-                      <div className="relative w-28 flex-shrink-0">
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          placeholder="0"
-                          value={splits[i]?.percentage || ''}
-                          onChange={(e) => handleSplitChange(i, 'percentage', e.target.value)}
-                          className="w-full rounded-lg border border-border bg-white py-2 pl-3 pr-8 text-right text-sm text-text transition-colors duration-200 placeholder:text-text-muted/50 focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary/20"
-                        />
-                        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-text-muted">
-                          %
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               )}
 
@@ -581,14 +644,15 @@ export default function ExpenseForm({
                             className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-text-muted"
                             aria-hidden="true"
                           />
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
+                          <NumericFormat
                             value={sharedCosts}
-                            onChange={(e) => setSharedCosts(e.target.value)}
+                            onValueChange={(values) => setSharedCosts(values.floatValue ?? '')}
+                            thousandSeparator=","
+                            decimalScale={2}
+                            fixedDecimalScale
+                            allowNegative={false}
                             placeholder="0.00"
-                            className="w-full rounded-lg border border-border bg-white py-2.5 pl-10 pr-16 text-sm text-text transition-colors duration-200 placeholder:text-text-muted/50 focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary/20"
+                            className="w-full rounded-lg border border-border bg-white py-2.5 pl-10 pr-16 text-sm text-text transition-colors duration-200 placeholder:text-text-muted/50 focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary/20 [!&::-webkit-outer-spin-button]:appearance-none [&_input[type=number]]:-moz-appearance:textfield [&_input[type=number]]::outer-spin-button:appearance-none [&_input[type=number]]::inner-spin-button:appearance-none"
                           />
                           <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-text-muted">
                             {currency}
