@@ -22,6 +22,7 @@ export default function GroupsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
   const [newCurrency, setNewCurrency] = useState('USD');
+  const [newBalanceMode, setNewBalanceMode] = useState('DYNAMIC');
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState('');
 
@@ -56,12 +57,13 @@ export default function GroupsPage() {
       const response = await groupService.create({
         name: newName.trim(),
         currency: newCurrency,
-        balanceMode: 'DYNAMIC',
+        balanceMode: newBalanceMode,
       });
       setGroups((prev) => [...prev, response.data]);
       setShowCreate(false);
       setNewName('');
       setNewCurrency('USD');
+      setNewBalanceMode('DYNAMIC');
       navigate(`/groups/${response.data.id}`);
     } catch (err) {
       setCreateError(err.message || 'Failed to create group.');
@@ -263,6 +265,46 @@ export default function GroupsPage() {
                   <option value="ARS">ARS — Argentine Peso</option>
                   <option value="CLP">CLP — Chilean Peso</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-text">
+                  Balance mode
+                </label>
+                <div className="space-y-2">
+                  <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3 transition-colors duration-200 hover:bg-border/20 has-[:checked]:border-secondary has-[:checked]:bg-secondary/5">
+                    <input
+                      type="radio"
+                      name="balance-mode"
+                      value="DYNAMIC"
+                      checked={newBalanceMode === 'DYNAMIC'}
+                      onChange={(e) => setNewBalanceMode(e.target.value)}
+                      className="mt-1 h-4 w-4 text-secondary focus:ring-secondary"
+                    />
+                    <div>
+                      <span className="text-sm font-medium text-text">Dynamic</span>
+                      <p className="text-xs text-text-muted">
+                        Balances update continuously. Good for casual groups and friends.
+                      </p>
+                    </div>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3 transition-colors duration-200 hover:bg-border/20 has-[:checked]:border-secondary has-[:checked]:bg-secondary/5">
+                    <input
+                      type="radio"
+                      name="balance-mode"
+                      value="STATIC"
+                      checked={newBalanceMode === 'STATIC'}
+                      onChange={(e) => setNewBalanceMode(e.target.value)}
+                      className="mt-1 h-4 w-4 text-secondary focus:ring-secondary"
+                    />
+                    <div>
+                      <span className="text-sm font-medium text-text">Static</span>
+                      <p className="text-xs text-text-muted">
+                        Settlement periods with freeze and payment acceptance. Good for roommates and formal arrangements.
+                      </p>
+                    </div>
+                  </label>
+                </div>
               </div>
 
               <div className="flex gap-3 pt-2">

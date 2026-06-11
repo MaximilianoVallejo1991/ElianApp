@@ -3,6 +3,7 @@ import { authenticate } from '../middleware/auth.middleware.js';
 import { validate } from '../middleware/validate.middleware.js';
 import { createPaymentSchema } from '../schemas/expense.schemas.js';
 import * as paymentController from '../controllers/payment.controller.js';
+import * as paymentService from '../services/payment.service.js';
 
 // ---------------------------------------------------------------------------
 //  Payment Routes
@@ -30,6 +31,27 @@ router.post(
 // GET /groups/:groupId/payments
 // List all payments for the group, newest first.
 router.get('/payments', paymentController.list);
+
+// POST /groups/:groupId/payments/:id/accept
+// Accept a PENDING payment. Only toUserId can accept.
+router.post('/payments/:id/accept', async (req, res) => {
+  const payment = await paymentService.acceptPayment(
+    req.params.id,
+    req.user.userId,
+  );
+  res.status(200).json(payment);
+});
+
+// POST /groups/:groupId/payments/:id/reject
+// Reject a PENDING payment. Only toUserId can reject.
+router.post('/payments/:id/reject', async (req, res) => {
+  const payment = await paymentService.rejectPayment(
+    req.params.id,
+    req.user.userId,
+    req.body.rejectionReason,
+  );
+  res.status(200).json(payment);
+});
 
 // DELETE /groups/:groupId/payments/:id
 // Delete a payment. Only the sender can delete.

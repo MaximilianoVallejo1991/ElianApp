@@ -7,6 +7,7 @@ import {
   calculateCollectiveSplits,
   computeCollectiveStatus,
 } from '../utils/splits.js';
+import { isGroupLocked } from './closure.service.js';
 
 // ---------------------------------------------------------------------------
 //  Expense Service
@@ -113,11 +114,13 @@ async function computeSplits(totalAmount, splitType, splits, groupId, participan
  *
  * 1. Verifies the requesting user is an ACTIVE member.
  * 2. Verifies the payer is an ACTIVE member.
- * 3. Verifies the group is in DYNAMIC mode.
- * 4. Computes splits based on splitType.
- * 5. For COLLECTIVE: sets status=PENDING, isLocked=false, no splits generated.
- * 6. For non-COLLECTIVE: generates splits immediately, status=COMPLETED, isLocked=true.
- * 7. Persists Expense + ExpenseSplit records (non-COLLECTIVE only).
+ * 3. For STATIC groups: checks group is not CLOSED, period is not CLOSING,
+ *    and auto-links expense to current period.
+ * 4. For DYNAMIC groups: works as before.
+ * 5. Computes splits based on splitType.
+ * 6. For COLLECTIVE: sets status=PENDING, isLocked=false, no splits generated.
+ * 7. For non-COLLECTIVE: generates splits immediately, status=COMPLETED, isLocked=true.
+ * 8. Persists Expense + ExpenseSplit records (non-COLLECTIVE only).
  *
  * @param {string} groupId
  * @param {{ amount: number, description: string, category: string, payerId: string, splitType: string, splits: Array, sharedCosts?: number, participantIds?: string[] }} data
@@ -128,6 +131,11 @@ export async function createExpense(groupId, data, userId) {
   // 1. Verify requester is ACTIVE member
   const group = await requireActiveMember(groupId, userId);
 
+  // 1b. Check group is not permanently closed
+  if (await isGroupLocked(groupId)) {
+    throw new AppError('GROUP_CLOSED', 403, 'Group is permanently closed');
+  }
+
   // 2. Verify payer is ACTIVE member
   const payerMembership = await prisma.groupMember.findUnique({
     where: { groupId_userId: { groupId, userId: data.payerId } },
@@ -137,13 +145,34 @@ export async function createExpense(groupId, data, userId) {
     throw new AppError('NOT_MEMBER', 400, 'Payer must be an active group member');
   }
 
-  // 3. Verify group is DYNAMIC mode
-  if (group.balanceMode !== 'DYNAMIC') {
-    throw new AppError(
-      'STATIC_GROUP_BALANCE',
-      400,
-      'Balance not available for static groups',
-    );
+  // 3. For STATIC groups: period handling
+  let periodId = null;
+  if (group.balanceMode === 'STATIC') {
+    const currentPeriod = await prisma.period.findFirst({
+      where: { groupId, isCurrent: true },
+    });
+
+    if (!currentPeriod) {
+      throw new AppError('NOT_FOUND', 400, 'No active period found for this group');
+    }
+
+    if (currentPeriod.status === 'CLOSING') {
+      throw new AppError(
+        'PERIOD_FROZEN',
+        409,
+        'Cannot create expense during closing period',
+      );
+    }
+
+    if (currentPeriod.status === 'CLOSED' || currentPeriod.status === 'FINAL') {
+      throw new AppError(
+        'PERIOD_FROZEN',
+        409,
+        'Cannot create expense in a closed period',
+      );
+    }
+
+    periodId = currentPeriod.id;
   }
 
   // 4. Handle COLLECTIVE vs non-COLLECTIVE
@@ -184,6 +213,7 @@ export async function createExpense(groupId, data, userId) {
           sharedCosts: data.sharedCosts || 0,
           participantIds: data.participantIds,
           date: data.date ? new Date(data.date) : new Date(),
+          periodId,
         },
       });
 
@@ -285,6 +315,7 @@ export async function createExpense(groupId, data, userId) {
       date: data.date ? new Date(data.date) : new Date(),
       status: 'COMPLETED',
       isLocked: true,
+      periodId,
       splits: {
         create: calculatedSplits.map((s) => ({
           userId: s.userId,
@@ -318,22 +349,44 @@ export async function createExpense(groupId, data, userId) {
  *
  * Verifies the requesting user is an ACTIVE member of the group.
  *
+ * For STATIC groups: defaults to current period only. Use ?periodId= to filter
+ * by specific period, or ?includeHistory=true to list all periods.
+ * For DYNAMIC groups: lists all expenses (no period filtering).
+ *
  * When `limit` and `offset` are provided, returns a paginated response
  * with `{ data, total, hasMore }`. Otherwise returns the raw array
  * (backward-compatible).
  *
  * @param {string} groupId
  * @param {string} userId
- * @param {{ limit?: number, offset?: number }} [opts]
+ * @param {{ limit?: number, offset?: number, periodId?: string, includeHistory?: boolean }} [opts]
  * @returns {Promise<Array<object>|{ data: Array<object>, total: number, hasMore: boolean }>>}
  */
-export async function listExpenses(groupId, userId, { limit, offset } = {}) {
-  await requireActiveMember(groupId, userId);
+export async function listExpenses(groupId, userId, { limit, offset, periodId, includeHistory } = {}) {
+  const group = await requireActiveMember(groupId, userId);
+
+  // Build where clause for STATIC groups
+  const whereClause = { groupId, deletedAt: null };
+
+  if (group.balanceMode === 'STATIC' && !includeHistory) {
+    // Default to current period for STATIC groups
+    if (periodId) {
+      whereClause.periodId = periodId;
+    } else {
+      const currentPeriod = await prisma.period.findFirst({
+        where: { groupId, isCurrent: true },
+        select: { id: true },
+      });
+      whereClause.periodId = currentPeriod?.id ?? 'none';
+    }
+  } else if (group.balanceMode === 'STATIC' && periodId) {
+    whereClause.periodId = periodId;
+  }
 
   const [total, expenses] = await Promise.all([
-    prisma.expense.count({ where: { groupId, deletedAt: null } }),
+    prisma.expense.count({ where: whereClause }),
     prisma.expense.findMany({
-      where: { groupId, deletedAt: null },
+      where: whereClause,
       include: {
         splits: {
           include: {

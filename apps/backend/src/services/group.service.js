@@ -11,10 +11,56 @@ import { AppError } from '../utils/errors.js';
 /**
  * Create a new group and add the creator as an ACTIVE member.
  *
+ * For STATIC groups: automatically creates an OPEN period and sets it
+ * as the group's current period.
+ *
  * @param {{ name: string, currency: string, balanceMode: string, ownerId: string }} input
  * @returns {Promise<{ id: string, name: string, currency: string, balanceMode: string, ownerId: string }>}
  */
 export async function createGroup({ name, currency, balanceMode, ownerId }) {
+  // For STATIC groups, create period in same transaction as group
+  if (balanceMode === 'STATIC') {
+    const group = await prisma.$transaction(async (tx) => {
+      const newGroup = await tx.group.create({
+        data: {
+          name,
+          currency,
+          balanceMode,
+          ownerId,
+          members: {
+            create: {
+              userId: ownerId,
+              status: 'ACTIVE',
+              joinedAt: new Date(),
+            },
+          },
+        },
+      });
+
+      // Create initial OPEN period for STATIC groups
+      const period = await tx.period.create({
+        data: {
+          groupId: newGroup.id,
+          status: 'OPEN',
+          isCurrent: true,
+        },
+      });
+
+      return newGroup;
+    });
+
+    return {
+      id: group.id,
+      name: group.name,
+      currency: group.currency,
+      balanceMode: group.balanceMode,
+      ownerId: group.ownerId,
+      createdAt: group.createdAt,
+      updatedAt: group.updatedAt,
+    };
+  }
+
+  // DYNAMIC groups: no period needed
   const group = await prisma.group.create({
     data: {
       name,

@@ -124,6 +124,12 @@ export const paymentService = {
 
   delete: (groupId, paymentId) =>
     api.delete(`/groups/${groupId}/payments/${paymentId}`),
+
+  accept: (groupId, paymentId) =>
+    api.post(`/groups/${groupId}/payments/${paymentId}/accept`),
+
+  reject: (groupId, paymentId, reason) =>
+    api.post(`/groups/${groupId}/payments/${paymentId}/reject`, { reason }),
 };
 
 //
@@ -145,6 +151,45 @@ export const membershipService = {
 
   leave: (groupId) =>
     api.post(`/groups/${groupId}/leave`),
+};
+
+//
+// Closure API (STATIC groups)
+//
+
+export const closureService = {
+  start: (groupId) =>
+    api.post(`/groups/${groupId}/closure/start`),
+
+  complete: (groupId) =>
+    api.post(`/groups/${groupId}/closure/complete`),
+
+  partial: (groupId) =>
+    api.post(`/groups/${groupId}/closure/partial`),
+
+  final: (groupId) =>
+    api.post(`/groups/${groupId}/closure/final`),
+};
+
+//
+// Period API (STATIC groups)
+//
+
+export const periodService = {
+  list: (groupId) =>
+    api.get(`/groups/${groupId}/periods`),
+
+  getById: (groupId, periodId) =>
+    api.get(`/groups/${groupId}/periods/${periodId}`),
+
+  getBalances: (groupId, periodId) =>
+    api.get(`/groups/${groupId}/periods/${periodId}/balances`),
+
+  getExpenses: (groupId, periodId) =>
+    api.get(`/groups/${groupId}/periods/${periodId}/expenses`),
+
+  getPayments: (groupId, periodId) =>
+    api.get(`/groups/${groupId}/periods/${periodId}/payments`),
 };
 
 //

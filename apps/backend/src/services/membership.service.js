@@ -264,11 +264,43 @@ export async function leaveGroup(groupId, userId) {
   }
 
   // Check net balance — negative balance means member owes money
-  const balances = await prisma.balance.findMany({
-    where: { groupId, userId },
+  // Compute from expenses and payments (same logic as balance.service.js)
+  const expenses = await prisma.expense.findMany({
+    where: { groupId, deletedAt: null },
+    select: { payerId: true, amount: true, splits: { select: { userId: true, amount: true } } },
   });
 
-  const netBalance = balances.reduce((sum, b) => sum + Number(b.netBalance || 0), 0);
+  const payments = await prisma.payment.findMany({
+    where: { groupId, deletedAt: null, status: 'ACCEPTED' },
+    select: { fromUserId: true, toUserId: true, amount: true },
+  });
+
+  let credits = 0;
+  let debits = 0;
+  let paymentsSent = 0;
+  let paymentsReceived = 0;
+
+  for (const expense of expenses) {
+    if (expense.payerId === userId) {
+      credits += Number(expense.amount);
+    }
+    for (const split of expense.splits) {
+      if (split.userId === userId) {
+        debits += Number(split.amount);
+      }
+    }
+  }
+
+  for (const payment of payments) {
+    if (payment.fromUserId === userId) {
+      paymentsSent += Number(payment.amount);
+    }
+    if (payment.toUserId === userId) {
+      paymentsReceived += Number(payment.amount);
+    }
+  }
+
+  const netBalance = credits - debits - paymentsSent + paymentsReceived;
 
   if (netBalance < 0) {
     throw new AppError(

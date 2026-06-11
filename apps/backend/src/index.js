@@ -11,6 +11,8 @@ import membershipRoutes from './routes/membership.routes.js';
 import expenseRoutes from './routes/expense.routes.js';
 import paymentRoutes from './routes/payment.routes.js';
 import inviteRoutes from './routes/invite.routes.js';
+import closureRoutes from './routes/closure.routes.js';
+import periodRoutes from './routes/period.routes.js';
 import { cleanupExpiredInviteTokens } from './services/invite.service.js';
 
 
@@ -40,6 +42,8 @@ app.use('/invites', inviteRoutes);
 app.use('/groups/:groupId', membershipRoutes);
 app.use('/groups/:groupId', expenseRoutes);
 app.use('/groups/:groupId', paymentRoutes);
+app.use('/groups/:groupId', closureRoutes);
+app.use('/groups/:groupId', periodRoutes);
 app.use('/groups/:groupId', inviteRoutes);
 
 // --- Error handler (MUST be last) --------------------------------------------

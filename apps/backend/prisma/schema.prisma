@@ -13,6 +13,7 @@ model Group {
   currency      String       @default("ARS")
   ownerId       String
   balanceMode   BalanceMode  @default(DYNAMIC)
+  status        GroupStatus  @default(ACTIVE)
 
   inviteToken   String?      @unique
   inviteExpires DateTime?
@@ -24,6 +25,7 @@ model Group {
   members             GroupMember[]
   expenses            Expense[]
   payments            Payment[]
+  periods             Period[]
 }
 
 model User {
@@ -72,6 +74,24 @@ model GroupMember {
   @@index([groupId])
 }
 
+model Period {
+  id        String       @id @default(cuid())
+  groupId   String
+  status    PeriodStatus @default(OPEN)
+  isCurrent Boolean      @default(false)
+  startedAt DateTime     @default(now())
+  closedAt  DateTime?
+  createdAt DateTime     @default(now())
+
+  group    Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  expenses Expense[]
+  payments Payment[]
+
+  @@index([groupId])
+  @@index([groupId, status])
+  @@index([groupId, isCurrent])
+}
+
 model Payment {
   id         String   @id @default(cuid())
 
@@ -88,7 +108,12 @@ model Payment {
 
   deletedAt  DateTime?
 
-  group       Group @relation(fields: [groupId], references: [id])
+  status          PaymentStatus @default(PENDING)
+  rejectionReason String?
+
+  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  period      Period?  @relation(fields: [periodId], references: [id], onDelete: SetNull)
+  periodId    String?
 
   fromUser    User @relation("PaymentSender", fields: [fromUserId], references: [id])
 
@@ -114,6 +139,11 @@ enum BalanceMode {
   STATIC
 }
 
+enum GroupStatus {
+  ACTIVE
+  CLOSED
+}
+
 enum ExpenseStatus {
   PENDING
   MISMATCH
@@ -124,6 +154,19 @@ enum MemberStatus {
   PENDING
   ACTIVE
   REMOVED
+}
+
+enum PeriodStatus {
+  OPEN
+  CLOSING
+  CLOSED
+  FINAL
+}
+
+enum PaymentStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
 }
 
 model Expense {
@@ -153,7 +196,9 @@ model Expense {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  group       Group @relation(fields: [groupId], references: [id])
+  group       Group        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  period      Period?      @relation(fields: [periodId], references: [id], onDelete: SetNull)
+  periodId    String?
 
   payer       User @relation("ExpensePayer", fields: [payerId], references: [id])
 

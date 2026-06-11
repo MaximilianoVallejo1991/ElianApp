@@ -18,6 +18,10 @@ import {
   PencilIcon,
   TrashIcon,
   ArrowRightStartOnRectangleIcon,
+  ArchiveBoxIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 import {
   groupService,
@@ -25,6 +29,8 @@ import {
   expenseService,
   paymentService,
   membershipService,
+  closureService,
+  periodService,
 } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import ExpenseForm from '../components/ExpenseForm';
@@ -111,15 +117,31 @@ export default function GroupDetailPage() {
   const [paymentLimit] = useState(20);
   const [paymentsLoading, setPaymentsLoading] = useState(false);
 
+  // Closure/Period state (STATIC groups only)
+  const [currentPeriod, setCurrentPeriod] = useState(null);
+  const [periodHistory, setPeriodHistory] = useState([]);
+  const [showClosureHistory, setShowClosureHistory] = useState(false);
+  const [expandedPeriod, setExpandedPeriod] = useState(null);
+  const [periodExpenses, setPeriodExpenses] = useState({});
+  const [periodPayments, setPeriodPayments] = useState({});
+  const [periodBalances, setPeriodBalances] = useState({});
+  const [closureLoading, setClosureLoading] = useState(false);
+  const [closureError, setClosureError] = useState('');
+  const [showClosureCompleteDialog, setShowClosureCompleteDialog] = useState(false);
+  const [rejectingPaymentId, setRejectingPaymentId] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
+
   const loadGroup = useCallback(async () => {
     setLoading(true);
     setError('');
+    let groupData;
     try {
       const [groupResponse, balanceResponse] = await Promise.all([
         groupService.getById(id),
         balanceService.getBalances(id),
       ]);
-      setGroup(groupResponse.data);
+      groupData = groupResponse.data;
+      setGroup(groupData);
       setBalances(balanceResponse.data);
     } catch (err) {
       if (err.status === 404) {
@@ -147,6 +169,19 @@ export default function GroupDetailPage() {
       setPaymentPage(1);
     } catch {
       // Silently ignore pagination load failures
+    }
+
+    // Load period info for STATIC groups
+    if (groupData?.balanceMode === 'STATIC') {
+      try {
+        const periodsRes = await periodService.list(id);
+        const periods = periodsRes.data || [];
+        const current = periods.find((p) => p.isCurrent);
+        setCurrentPeriod(current || null);
+        setPeriodHistory(periods.filter((p) => p.status !== 'OPEN').reverse());
+      } catch {
+        // Silently ignore period load failures
+      }
     }
   }, [id, expenseLimit, paymentLimit]);
 
@@ -217,6 +252,86 @@ export default function GroupDetailPage() {
       alert(err.message || 'Failed to leave group.');
     } finally {
       setShowLeaveGroupConfirm(false);
+    }
+  };
+
+  // ---- Closure handlers (STATIC groups) ----
+
+  const handleStartClosure = async () => {
+    setClosureLoading(true);
+    setClosureError('');
+    try {
+      await closureService.start(id);
+      await loadGroup();
+    } catch (err) {
+      setClosureError(err.message || 'Failed to start closure.');
+    } finally {
+      setClosureLoading(false);
+    }
+  };
+
+  const handleCompleteClosure = async (type) => {
+    setClosureLoading(true);
+    setClosureError('');
+    try {
+      if (type === 'partial') {
+        await closureService.partial(id);
+      } else {
+        await closureService.final(id);
+      }
+      setShowClosureCompleteDialog(false);
+      await loadGroup();
+    } catch (err) {
+      setClosureError(err.message || 'Failed to complete closure.');
+    } finally {
+      setClosureLoading(false);
+    }
+  };
+
+  const handleAcceptPayment = async (paymentId) => {
+    try {
+      await paymentService.accept(id, paymentId);
+      await loadGroup();
+    } catch (err) {
+      alert(err.message || 'Failed to accept payment.');
+    }
+  };
+
+  const handleRejectPayment = async () => {
+    if (!rejectingPaymentId) return;
+    try {
+      await paymentService.reject(id, rejectingPaymentId, rejectReason);
+      setRejectingPaymentId(null);
+      setRejectReason('');
+      await loadGroup();
+    } catch (err) {
+      alert(err.message || 'Failed to reject payment.');
+    }
+  };
+
+  // ---- Period history handlers ----
+
+  const handleExpandPeriod = async (periodId) => {
+    if (expandedPeriod === periodId) {
+      setExpandedPeriod(null);
+      return;
+    }
+    setExpandedPeriod(periodId);
+
+    // Fetch expenses, payments, and balances for this period if not already loaded
+    if (!periodExpenses[periodId]) {
+      try {
+        const [expRes, payRes, balRes] = await Promise.all([
+          periodService.getExpenses(id, periodId),
+          periodService.getPayments(id, periodId),
+          periodService.getBalances(id, periodId),
+        ]);
+        setPeriodExpenses((prev) => ({ ...prev, [periodId]: expRes.data || [] }));
+        setPeriodPayments((prev) => ({ ...prev, [periodId]: payRes.data || [] }));
+        setPeriodBalances((prev) => ({ ...prev, [periodId]: balRes.data?.balances || [] }));
+      } catch {
+        // Silently ignore
+      }
     }
   };
 
@@ -299,6 +414,15 @@ export default function GroupDetailPage() {
   balances.forEach((b) => {
     balanceByUser[b.userId] = b.netBalance;
   });
+
+  // Check if all payments in CLOSING period are accepted (for STATIC groups)
+  const isClosing = currentPeriod?.status === 'CLOSING';
+  const pendingPayments = isClosing ? payments.filter((p) => p.status === 'PENDING') : [];
+  const rejectedPayments = isClosing ? payments.filter((p) => p.status === 'REJECTED') : [];
+  const acceptedPayments = isClosing ? payments.filter((p) => p.status === 'ACCEPTED') : [];
+  const allPaymentsAccepted = isClosing
+    && payments.length > 0
+    && payments.every((p) => p.status === 'ACCEPTED');
 
   // ------------------------------------------------------------------
   // Helpers
@@ -406,22 +530,28 @@ export default function GroupDetailPage() {
 
             {/* Action buttons */}
             <div className="flex flex-shrink-0 flex-col gap-2 sm:items-end">
-              <button
-                type="button"
-                onClick={() => setShowExpenseForm(true)}
-                className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3 font-heading text-sm font-semibold text-white transition-all duration-200 hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 sm:w-auto"
-              >
-                <PlusIcon className="h-5 w-5" aria-hidden="true" />
-                Add expense
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowPaymentForm(true)}
-                className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-cta bg-white px-5 py-3 font-heading text-sm font-semibold text-cta transition-all duration-200 hover:bg-cta/5 focus:outline-none focus:ring-2 focus:ring-cta focus:ring-offset-2 sm:w-auto"
-              >
-                <ArrowPathIcon className="h-5 w-5" aria-hidden="true" />
-                Record payment
-              </button>
+              {/* Hide Add expense during CLOSING for STATIC groups */}
+              {(group.balanceMode !== 'STATIC' || currentPeriod?.status !== 'CLOSING') && (
+                <button
+                  type="button"
+                  onClick={() => setShowExpenseForm(true)}
+                  className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3 font-heading text-sm font-semibold text-white transition-all duration-200 hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 sm:w-auto"
+                >
+                  <PlusIcon className="h-5 w-5" aria-hidden="true" />
+                  Add expense
+                </button>
+              )}
+              {/* Show Record payment for DYNAMIC groups, or STATIC groups during CLOSING */}
+              {(group.balanceMode !== 'STATIC' || currentPeriod?.status === 'CLOSING') && (
+                <button
+                  type="button"
+                  onClick={() => setShowPaymentForm(true)}
+                  className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-cta bg-white px-5 py-3 font-heading text-sm font-semibold text-cta transition-all duration-200 hover:bg-cta/5 focus:outline-none focus:ring-2 focus:ring-cta focus:ring-offset-2 sm:w-auto"
+                >
+                  <ArrowPathIcon className="h-5 w-5" aria-hidden="true" />
+                  Record payment
+                </button>
+              )}
               {group.ownerId === currentUserId && (
                 <>
                   <button
@@ -471,6 +601,124 @@ export default function GroupDetailPage() {
             </div>
           </div>
         </div>
+
+        {/* ---- Closure section (STATIC groups only) ---- */}
+        {group.balanceMode === 'STATIC' && currentPeriod && (
+          <div className="mt-8 rounded-xl border border-border bg-white p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/5">
+                  <LockClosedIcon className="h-5 w-5 text-primary" aria-hidden="true" />
+                </div>
+                <div>
+                  <h2 className="font-heading text-lg font-bold text-primary">Settlement Period</h2>
+                  <p className="text-xs text-text-muted">
+                    {currentPeriod.status === 'OPEN' && 'Open — expenses can be added'}
+                    {currentPeriod.status === 'CLOSING' && 'Closing — recording payments, awaiting acceptance'}
+                    {currentPeriod.status === 'CLOSED' && 'Closed'}
+                    {currentPeriod.status === 'FINAL' && 'Final — group is permanently closed'}
+                  </p>
+                </div>
+              </div>
+              <span
+                className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${
+                  currentPeriod.status === 'OPEN'
+                    ? 'bg-success/10 text-success'
+                    : currentPeriod.status === 'CLOSING'
+                      ? 'bg-warning/10 text-warning'
+                      : currentPeriod.status === 'CLOSED'
+                        ? 'bg-border/30 text-text-muted'
+                        : 'bg-error/10 text-error'
+                }`}
+              >
+                {currentPeriod.status}
+              </span>
+            </div>
+
+            {closureError && (
+              <div className="mt-4 rounded-lg border border-error/30 bg-error/5 px-4 py-3 text-sm text-error" role="alert">
+                {closureError}
+              </div>
+            )}
+
+            {currentPeriod.status === 'OPEN' && group.ownerId === currentUserId && (
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={handleStartClosure}
+                  disabled={closureLoading}
+                  className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-warning bg-white px-5 py-3 font-heading text-sm font-semibold text-warning transition-all duration-200 hover:bg-warning/5 focus:outline-none focus:ring-2 focus:ring-warning focus:ring-offset-2 disabled:opacity-50"
+                >
+                  <LockClosedIcon className="h-5 w-5" aria-hidden="true" />
+                  {closureLoading ? 'Starting...' : 'Start Closure'}
+                </button>
+                <p className="mt-2 text-xs text-text-muted">
+                  Freezes expense creation. Members must settle debts before closure completes.
+                </p>
+              </div>
+            )}
+
+            {currentPeriod.status === 'CLOSING' && (
+              <div className="mt-4">
+                {allPaymentsAccepted && group.ownerId === currentUserId && (
+                  <div>
+                    <p className="mb-3 text-sm font-medium text-success">
+                      <CheckCircleIcon className="inline h-4 w-4" aria-hidden="true" />
+                      {' '}All payments accepted. Choose closure type:
+                    </p>
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => handleCompleteClosure('partial')}
+                        disabled={closureLoading}
+                        className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-secondary bg-white px-4 py-2.5 font-heading text-sm font-semibold text-secondary transition-all duration-200 hover:bg-secondary/5 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2 disabled:opacity-50"
+                      >
+                        <ArrowPathIcon className="h-4 w-4" aria-hidden="true" />
+                        {closureLoading ? 'Processing...' : 'Partial Closure'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCompleteClosure('final')}
+                        disabled={closureLoading}
+                        className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-error bg-white px-4 py-2.5 font-heading text-sm font-semibold text-error transition-all duration-200 hover:bg-error/5 focus:outline-none focus:ring-2 focus:ring-error focus:ring-offset-2 disabled:opacity-50"
+                      >
+                        <ArchiveBoxIcon className="h-4 w-4" aria-hidden="true" />
+                        {closureLoading ? 'Processing...' : 'Final Closure'}
+                      </button>
+                    </div>
+                    <p className="mt-2 text-xs text-text-muted">
+                      Partial: opens a new period for more expenses. Final: permanently closes the group.
+                    </p>
+                  </div>
+                )}
+                {!allPaymentsAccepted && (
+                  <div>
+                    {payments.length === 0 && (
+                      <p className="text-sm text-text-muted">
+                        No payments recorded yet. Record payments below to begin settlement.
+                      </p>
+                    )}
+                    {pendingPayments.length > 0 && (
+                      <p className="text-sm text-warning">
+                        {pendingPayments.length} payment{pendingPayments.length !== 1 ? 's' : ''} waiting for creditor acceptance.
+                      </p>
+                    )}
+                    {rejectedPayments.length > 0 && (
+                      <p className="text-sm text-error">
+                        {rejectedPayments.length} payment{rejectedPayments.length !== 1 ? 's' : ''} rejected. Resolve and re-record.
+                      </p>
+                    )}
+                    {payments.length > 0 && acceptedPayments.length > 0 && !allPaymentsAccepted && pendingPayments.length === 0 && rejectedPayments.length === 0 && (
+                      <p className="text-sm text-text-muted">
+                        All payments processed. Record more if needed.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ---- Members section ---- */}
         <section>
@@ -903,30 +1151,41 @@ export default function GroupDetailPage() {
         <section className="mt-12 mb-12">
           <div className="flex items-center justify-between">
             <h2 className="font-heading text-xl font-bold text-primary">Payments</h2>
-            <button
-              type="button"
-              onClick={() => setShowPaymentForm(true)}
-              className="inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium text-cta transition-colors duration-200 hover:text-cta/80 focus:outline-none focus:ring-2 focus:ring-cta/30 rounded-lg px-2 py-1"
-            >
-              <PlusIcon className="h-4 w-4" aria-hidden="true" />
-              Record
-            </button>
+            {/* Show Record button for DYNAMIC groups, or STATIC groups during CLOSING */}
+            {(group.balanceMode !== 'STATIC' || currentPeriod?.status === 'CLOSING') && (
+              <button
+                type="button"
+                onClick={() => setShowPaymentForm(true)}
+                className="inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium text-cta transition-colors duration-200 hover:text-cta/80 focus:outline-none focus:ring-2 focus:ring-cta/30 rounded-lg px-2 py-1"
+              >
+                <PlusIcon className="h-4 w-4" aria-hidden="true" />
+                Record
+              </button>
+            )}
           </div>
 
-          {payments.length === 0 ? (
+          {group.balanceMode === 'STATIC' && currentPeriod?.status !== 'CLOSING' && payments.length === 0 && (
             <div className="mt-4 rounded-xl border border-border bg-white px-5 py-6 text-center">
               <CreditCardIcon className="mx-auto h-8 w-8 text-text-muted/40" aria-hidden="true" />
               <p className="mt-2 text-sm text-text-muted">
-                No payments recorded yet.
+                {currentPeriod?.status === 'OPEN' && 'Payments can only be recorded during a closure period.'}
+                {currentPeriod?.status === 'CLOSED' && 'No payments in this closed period.'}
+                {currentPeriod?.status === 'FINAL' && 'Group is permanently closed.'}
               </p>
             </div>
-          ) : (<>
+          )}
+
+          {payments.length > 0 && (<>
             <div className="mt-4 rounded-xl border border-border bg-white">
               <ul className="divide-y divide-border">
                 {payments.map((payment) => {
                   const isSender = payment.fromUserId === currentUserId;
+                  const isReceiver = payment.toUserId === currentUserId;
                   const isGroupOwner = group.ownerId === currentUserId;
                   const canDeletePayment = isSender || isGroupOwner;
+                  const isPending = payment.status === 'PENDING';
+                  const isAccepted = payment.status === 'ACCEPTED';
+                  const isRejected = payment.status === 'REJECTED';
 
                   return (
                   <li
@@ -950,6 +1209,13 @@ export default function GroupDetailPage() {
                         <p className="text-xs text-text-muted">
                           {formatDate(payment.paidAt)}
                           {payment.method ? ` · ${payment.method}` : ''}
+                          {isClosing && (
+                            <span className="ml-2">
+                              {isPending && <span className="text-warning">· Pending</span>}
+                              {isAccepted && <span className="text-success">· Accepted</span>}
+                              {isRejected && <span className="text-error">· Rejected</span>}
+                            </span>
+                          )}
                         </p>
                       </div>
                     </div>
@@ -957,7 +1223,31 @@ export default function GroupDetailPage() {
                       <span className="font-heading text-sm font-bold text-cta">
                         {formatCurrency(payment.amount, currency)}
                       </span>
-                      {canDeletePayment && (
+                      {/* Accept/Reject buttons during CLOSING (receiver only) */}
+                      {isClosing && isReceiver && isPending && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleAcceptPayment(payment.id)}
+                            className="cursor-pointer rounded p-1 text-success transition-colors duration-200 hover:bg-success/10 focus:outline-none focus:ring-2 focus:ring-success/30"
+                            aria-label="Accept payment"
+                          >
+                            <CheckCircleIcon className="h-4 w-4" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRejectingPaymentId(payment.id);
+                              setRejectReason('');
+                            }}
+                            className="cursor-pointer rounded p-1 text-error transition-colors duration-200 hover:bg-error/10 focus:outline-none focus:ring-2 focus:ring-error/30"
+                            aria-label="Reject payment"
+                          >
+                            <XMarkIcon className="h-4 w-4" aria-hidden="true" />
+                          </button>
+                        </>
+                      )}
+                      {canDeletePayment && !isClosing && (
                         <button
                           type="button"
                           onClick={() => setDeletingPaymentId(payment.id)}
@@ -1097,6 +1387,224 @@ export default function GroupDetailPage() {
           onConfirm={handleDeleteGroup}
           onClose={() => setShowDeleteGroupConfirm(false)}
         />
+      )}
+
+      {/* Reject payment dialog */}
+      {rejectingPaymentId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-primary/40 p-4 backdrop-blur-sm"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setRejectingPaymentId(null);
+              setRejectReason('');
+            }
+          }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Reject payment"
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-error/10">
+                <XMarkIcon className="h-5 w-5 text-error" aria-hidden="true" />
+              </div>
+              <h3 className="font-heading text-lg font-bold text-error">Reject Payment</h3>
+            </div>
+            <p className="mt-2 text-sm text-text-muted">
+              Provide a reason for rejecting this payment. The sender will be notified.
+            </p>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Reason for rejection (optional)"
+              rows={3}
+              className="mt-4 w-full rounded-lg border border-border bg-white px-4 py-3 text-sm text-text transition-colors duration-200 placeholder:text-text-muted/50 focus:border-error focus:outline-none focus:ring-2 focus:ring-error/20"
+            />
+            <div className="mt-4 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setRejectingPaymentId(null);
+                  setRejectReason('');
+                }}
+                className="flex-1 cursor-pointer rounded-lg border border-border px-4 py-3 text-sm font-medium text-text-muted transition-colors duration-200 hover:bg-border/30 focus:outline-none focus:ring-2 focus:ring-secondary/30"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleRejectPayment}
+                className="flex-1 cursor-pointer rounded-lg bg-error px-4 py-3 font-heading text-sm font-semibold text-white transition-colors duration-200 hover:bg-error/90 focus:outline-none focus:ring-2 focus:ring-error focus:ring-offset-2"
+              >
+                Reject
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Period history (STATIC groups) */}
+      {group.balanceMode === 'STATIC' && periodHistory.length > 0 && (
+        <div className="mt-8 rounded-xl border border-border bg-white">
+          <button
+            type="button"
+            onClick={() => setShowClosureHistory(!showClosureHistory)}
+            className="flex w-full items-center justify-between px-6 py-4 text-left"
+          >
+            <div className="flex items-center gap-3">
+              <ArchiveBoxIcon className="h-5 w-5 text-text-muted" aria-hidden="true" />
+              <span className="font-heading text-sm font-semibold text-text">
+                Settlement History ({periodHistory.length})
+              </span>
+            </div>
+            {showClosureHistory ? (
+              <ChevronUpIcon className="h-5 w-5 text-text-muted" aria-hidden="true" />
+            ) : (
+              <ChevronDownIcon className="h-5 w-5 text-text-muted" aria-hidden="true" />
+            )}
+          </button>
+
+          {showClosureHistory && (
+            <div className="border-t border-border px-6 py-4">
+              <ul className="space-y-4">
+                {periodHistory.map((period) => {
+                  const isExpanded = expandedPeriod === period.id;
+                  const pExpenses = periodExpenses[period.id] || [];
+                  const pPayments = periodPayments[period.id] || [];
+                  const pBalances = periodBalances[period.id] || [];
+
+                  return (
+                    <li key={period.id} className="rounded-lg border border-border">
+                      <button
+                        type="button"
+                        onClick={() => handleExpandPeriod(period.id)}
+                        className="flex w-full items-center justify-between px-4 py-3 text-left"
+                      >
+                        <div>
+                          <span className="text-sm font-medium text-text">
+                            Period started {formatDate(period.startedAt)}
+                          </span>
+                          <span
+                            className={`ml-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+                              period.status === 'CLOSED'
+                                ? 'bg-border/30 text-text-muted'
+                                : 'bg-error/10 text-error'
+                            }`}
+                          >
+                            {period.status === 'CLOSED' ? 'Partial' : 'Final'}
+                          </span>
+                          <span className="ml-3 text-xs text-text-muted">
+                            {period._count?.expenses || 0} expenses · {period._count?.payments || 0} payments
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {period.closedAt && (
+                            <span className="text-xs text-text-muted">
+                              Closed {formatDate(period.closedAt)}
+                            </span>
+                          )}
+                          {isExpanded ? (
+                            <ChevronUpIcon className="h-4 w-4 text-text-muted" aria-hidden="true" />
+                          ) : (
+                            <ChevronDownIcon className="h-4 w-4 text-text-muted" aria-hidden="true" />
+                          )}
+                        </div>
+                      </button>
+
+                      {/* Expanded details */}
+                      {isExpanded && (
+                        <div className="border-t border-border bg-background/50 px-4 py-4">
+                          {/* Expenses */}
+                          <div className="mb-4">
+                            <h4 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Expenses</h4>
+                            {pExpenses.length === 0 ? (
+                              <p className="mt-2 text-sm text-text-muted">No expenses in this period.</p>
+                            ) : (
+                              <ul className="mt-2 space-y-2">
+                                {pExpenses.map((exp) => (
+                                  <li key={exp.id} className="flex items-center justify-between rounded-lg border border-border bg-white px-3 py-2 text-sm">
+                                    <div>
+                                      <span className="font-medium text-text">{exp.description || 'Untitled'}</span>
+                                      <span className="ml-2 text-xs text-text-muted">
+                                        paid by {exp.payer?.nickName || exp.payer?.email || 'Unknown'}
+                                      </span>
+                                    </div>
+                                    <span className="font-semibold text-text">
+                                      {formatCurrency(exp.amount, currency)}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+
+                          {/* Payments */}
+                          <div className="mb-4">
+                            <h4 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Payments</h4>
+                            {pPayments.length === 0 ? (
+                              <p className="mt-2 text-sm text-text-muted">No payments in this period.</p>
+                            ) : (
+                              <ul className="mt-2 space-y-2">
+                                {pPayments.map((pay) => (
+                                  <li key={pay.id} className="flex items-center justify-between rounded-lg border border-border bg-white px-3 py-2 text-sm">
+                                    <div>
+                                      <span className="font-medium text-text">
+                                        {pay.fromUser?.nickName || pay.fromUser?.email || 'Unknown'}
+                                        {' → '}
+                                        {pay.toUser?.nickName || pay.toUser?.email || 'Unknown'}
+                                      </span>
+                                      <span className="ml-2 text-xs text-text-muted">
+                                        {pay.status === 'ACCEPTED' ? 'Accepted' : pay.status}
+                                      </span>
+                                    </div>
+                                    <span className="font-semibold text-cta">
+                                      {formatCurrency(pay.amount, currency)}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+
+                          {/* Balances at closure (before payments) */}
+                          {pBalances.length > 0 && (
+                            <div>
+                              <h4 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Balances at Closure</h4>
+                              <ul className="mt-2 space-y-1">
+                                {pBalances.map((b) => (
+                                  <li key={b.userId} className="flex flex-col gap-1 rounded-lg bg-white px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="flex items-center gap-3">
+                                      <span className="text-text">{b.user?.nickName || b.userId}</span>
+                                      <span className="text-xs text-text-muted">
+                                        participated in {formatCurrency(b.totalExpenseParticipation, currency)}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-4">
+                                      <span className="text-xs text-text-muted">
+                                        owed: <span className={b.initialBalance > 0 ? 'text-success' : b.initialBalance < 0 ? 'text-error' : 'text-text-muted'}>
+                                          {b.initialBalance > 0 && '+'}{formatCurrency(b.initialBalance, currency)}
+                                        </span>
+                                      </span>
+                                      <span className="text-xs text-text-muted">
+                                        after payments: <span className={b.finalBalance > 0 ? 'text-success' : b.finalBalance < 0 ? 'text-error' : 'text-text-muted'}>
+                                          {b.finalBalance > 0 && '+'}{formatCurrency(b.finalBalance, currency)}
+                                        </span>
+                                      </span>
+                                    </div>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

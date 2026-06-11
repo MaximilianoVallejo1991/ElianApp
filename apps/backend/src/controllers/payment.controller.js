@@ -36,15 +36,18 @@ export async function create(req, res) {
  *
  * Returns paginated payments for the group, ordered by paidAt descending.
  * Query params: `limit` (default: all), `offset` (default: 0).
+ * For STATIC groups: `periodId` filters by period, `includeHistory=true` lists all.
  * Response: `{ data: Payment[], total: number, hasMore: boolean }`
  */
 export async function list(req, res) {
   const limit = parseInt(req.query.limit, 10) || undefined;
   const offset = parseInt(req.query.offset, 10) || undefined;
+  const periodId = req.query.periodId || undefined;
+  const includeHistory = req.query.includeHistory === 'true';
   const result = await paymentService.listPayments(
     req.params.groupId,
     req.user.userId,
-    { limit, offset },
+    { limit, offset, periodId, includeHistory },
   );
   res.status(200).json(result);
 }

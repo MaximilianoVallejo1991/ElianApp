@@ -1,5 +1,6 @@
 import prisma from '../lib/prisma.js';
 import { AppError } from '../utils/errors.js';
+import { isGroupLocked } from './closure.service.js';
 
 // ---------------------------------------------------------------------------
 //  Payment Service
@@ -51,7 +52,8 @@ async function requireActiveMember(groupId, userId) {
  * 3. Verify toUserId is an ACTIVE member.
  * 4. Verify fromUserId !== toUserId.
  * 5. Verify amount > 0.
- * 6. Create Payment record.
+ * 6. For STATIC groups: auto-link to current period.
+ * 7. Create Payment record with status=PENDING.
  *
  * @param {string} groupId
  * @param {string} fromUserId — must equal authenticated userId
@@ -73,7 +75,12 @@ export async function createPayment(
   userId,
 ) {
   // 1. Verify requester is ACTIVE member
-  await requireActiveMember(groupId, userId);
+  const group = await requireActiveMember(groupId, userId);
+
+  // 1b. Check group is not permanently closed
+  if (await isGroupLocked(groupId)) {
+    throw new AppError('GROUP_CLOSED', 403, 'Group is permanently closed');
+  }
 
   // 2. fromUserId must match authenticated user
   if (fromUserId !== userId) {
@@ -125,7 +132,18 @@ export async function createPayment(
     );
   }
 
-  // 7. Create payment
+  // 7. For STATIC groups: get current period
+  let periodId = null;
+  if (group.balanceMode === 'STATIC') {
+    const currentPeriod = await prisma.period.findFirst({
+      where: { groupId, isCurrent: true },
+    });
+    if (currentPeriod) {
+      periodId = currentPeriod.id;
+    }
+  }
+
+  // 8. Create payment with status=PENDING (DB default)
   const payment = await prisma.payment.create({
     data: {
       groupId,
@@ -134,6 +152,8 @@ export async function createPayment(
       amount,
       method: method || null,
       paidAt: paidAt ? new Date(paidAt) : new Date(),
+      periodId,
+      status: 'PENDING',
     },
     include: {
       fromUser: {
@@ -153,22 +173,44 @@ export async function createPayment(
  *
  * Verifies the requesting user is an ACTIVE member.
  *
+ * For STATIC groups: defaults to current period only. Use ?periodId= to filter
+ * by specific period, or ?includeHistory=true to list all periods.
+ * For DYNAMIC groups: lists all payments (no period filtering).
+ *
  * When `limit` and `offset` are provided, returns a paginated response
  * with `{ data, total, hasMore }`. Otherwise returns the raw array
  * (backward-compatible).
  *
  * @param {string} groupId
  * @param {string} userId — authenticated user
- * @param {{ limit?: number, offset?: number }} [opts]
+ * @param {{ limit?: number, offset?: number, periodId?: string, includeHistory?: boolean }} [opts]
  * @returns {Promise<Array<object>|{ data: Array<object>, total: number, hasMore: boolean }>>}
  */
-export async function listPayments(groupId, userId, { limit, offset } = {}) {
-  await requireActiveMember(groupId, userId);
+export async function listPayments(groupId, userId, { limit, offset, periodId, includeHistory } = {}) {
+  const group = await requireActiveMember(groupId, userId);
+
+  // Build where clause
+  const whereClause = { groupId, deletedAt: null };
+
+  if (group.balanceMode === 'STATIC' && !includeHistory) {
+    // Default to current period for STATIC groups
+    if (periodId) {
+      whereClause.periodId = periodId;
+    } else {
+      const currentPeriod = await prisma.period.findFirst({
+        where: { groupId, isCurrent: true },
+        select: { id: true },
+      });
+      whereClause.periodId = currentPeriod?.id ?? 'none';
+    }
+  } else if (group.balanceMode === 'STATIC' && periodId) {
+    whereClause.periodId = periodId;
+  }
 
   const [total, payments] = await Promise.all([
-    prisma.payment.count({ where: { groupId, deletedAt: null } }),
+    prisma.payment.count({ where: whereClause }),
     prisma.payment.findMany({
-      where: { groupId, deletedAt: null },
+      where: whereClause,
       include: {
         fromUser: {
           select: { id: true, email: true, nickName: true },
@@ -230,5 +272,117 @@ export async function deletePayment(paymentId, userId) {
   await prisma.payment.update({
     where: { id: paymentId },
     data: { deletedAt: new Date() },
+  });
+}
+
+/**
+ * Accept a PENDING payment. Only the payment receiver (toUserId) can accept.
+ *
+ * @param {string} paymentId
+ * @param {string} userId — authenticated user (must be toUserId)
+ * @returns {Promise<object>} updated payment
+ * @throws {AppError} PAYMENT_NOT_FOUND | FORBIDDEN
+ */
+export async function acceptPayment(paymentId, userId) {
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+    include: {
+      group: {
+        select: { id: true, ownerId: true, balanceMode: true, status: true },
+      },
+    },
+  });
+
+  if (!payment) {
+    throw new AppError('PAYMENT_NOT_FOUND', 404, 'Payment not found');
+  }
+
+  // Only the payment receiver can accept
+  if (payment.toUserId !== userId) {
+    throw new AppError(
+      'FORBIDDEN',
+      403,
+      'Only the payment receiver can accept',
+    );
+  }
+
+  // Payment must be PENDING
+  if (payment.status !== 'PENDING') {
+    throw new AppError(
+      'INVALID_OPERATION',
+      400,
+      'Payment is not in PENDING status',
+    );
+  }
+
+  return prisma.payment.update({
+    where: { id: paymentId },
+    data: { status: 'ACCEPTED' },
+    include: {
+      fromUser: {
+        select: { id: true, email: true, nickName: true },
+      },
+      toUser: {
+        select: { id: true, email: true, nickName: true },
+      },
+    },
+  });
+}
+
+/**
+ * Reject a PENDING payment. Only the payment receiver (toUserId) can reject.
+ *
+ * @param {string} paymentId
+ * @param {string} userId — authenticated user (must be toUserId)
+ * @param {string} [rejectionReason] — optional reason for rejection
+ * @returns {Promise<object>} updated payment
+ * @throws {AppError} PAYMENT_NOT_FOUND | FORBIDDEN
+ */
+export async function rejectPayment(paymentId, userId, rejectionReason) {
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+    include: {
+      group: {
+        select: { id: true, ownerId: true, balanceMode: true, status: true },
+      },
+    },
+  });
+
+  if (!payment) {
+    throw new AppError('PAYMENT_NOT_FOUND', 404, 'Payment not found');
+  }
+
+  // Only the payment receiver can reject
+  if (payment.toUserId !== userId) {
+    throw new AppError(
+      'FORBIDDEN',
+      403,
+      'Only the payment receiver can reject',
+    );
+  }
+
+  // Payment must be PENDING
+  if (payment.status !== 'PENDING') {
+    throw new AppError(
+      'INVALID_OPERATION',
+      400,
+      'Payment is not in PENDING status',
+    );
+  }
+
+  return prisma.payment.update({
+    where: { id: paymentId },
+    data: {
+      status: 'REJECTED',
+      rejectionReason: rejectionReason || null,
+    },
+    include: {
+      fromUser: {
+        select: { id: true, email: true, nickName: true },
+      },
+      toUser: {
+        select: { id: true, email: true, nickName: true },
+      },
+    },
   });
 }
