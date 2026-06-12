@@ -6,7 +6,7 @@ import { z } from 'zod';
  * Required fields: email, nickName, password
  *   - email: valid email format
  *   - nickName: 3-30 chars, alphanumeric + underscores
- *   - password: min 8 chars
+ *   - password: min 6 chars
  *   - inviteToken: optional, consumed to auto-join a group with ACTIVE status
  */
 export const registerSchema = z.object({
@@ -20,7 +20,7 @@ export const registerSchema = z.object({
     .regex(/^[a-zA-Z0-9_]+$/, 'Nickname can only contain letters, numbers, and underscores'),
   password: z
     .string()
-    .min(8, 'Password must be at least 8 characters'),
+    .min(6, 'Password must be at least 6 characters'),
   inviteToken: z
     .string()
     .uuid('Invalid invite token format')
@@ -55,7 +55,7 @@ export const forgotPasswordSchema = z.object({
 /**
  * POST /auth/reset-password
  *
- * Required fields: token (from reset link), password (min 8 chars)
+ * Required fields: token (from reset link), password (min 6 chars)
  */
 export const resetPasswordSchema = z.object({
   token: z
@@ -63,5 +63,5 @@ export const resetPasswordSchema = z.object({
     .min(1, 'Reset token is required'),
   password: z
     .string()
-    .min(8, 'Password must be at least 8 characters'),
+    .min(6, 'Password must be at least 6 characters'),
 });
