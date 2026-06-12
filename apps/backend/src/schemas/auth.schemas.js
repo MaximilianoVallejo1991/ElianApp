@@ -51,3 +51,17 @@ export const forgotPasswordSchema = z.object({
     .string()
     .email('Invalid email address'),
 });
+
+/**
+ * POST /auth/reset-password
+ *
+ * Required fields: token (from reset link), password (min 8 chars)
+ */
+export const resetPasswordSchema = z.object({
+  token: z
+    .string()
+    .min(1, 'Reset token is required'),
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters'),
+});

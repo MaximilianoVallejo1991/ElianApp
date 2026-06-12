@@ -1,5 +1,6 @@
 import * as authService from '../services/auth.service.js';
 import { signToken } from '../utils/jwt.js';
+import { sendPasswordResetEmail } from '../lib/email.js';
 
 // ---------------------------------------------------------------------------
 //  Auth Controller
@@ -98,14 +99,34 @@ export async function me(req, res) {
  * POST /auth/forgot-password
  *
  * Always returns 200 regardless of whether the email exists.
- * The generated token is NOT included in the response (in a real system
- * it would be emailed).  The raw token is returned internally by the
- * service but never exposed to the client.
+ * If the email is registered, generates a reset token and sends it via email.
+ * The raw token is never exposed in the API response.
  */
 export async function forgotPassword(req, res) {
   const { email } = req.body;
-  await authService.generateResetToken(email);
+  const result = await authService.generateResetToken(email);
+
+  if (result) {
+    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const resetUrl = `${baseUrl}/reset-password?token=${result.rawToken}`;
+    await sendPasswordResetEmail(result.userEmail, resetUrl);
+  }
+
   res.status(200).json({
-    message: 'If the email is registered, a reset token has been generated',
+    message: 'If the email is registered, a reset link has been sent',
+  });
+}
+
+/**
+ * POST /auth/reset-password
+ *
+ * Validates the reset token and sets a new password.
+ * Token must be valid and not expired. Clears token on success.
+ */
+export async function resetPassword(req, res) {
+  const { token, password } = req.body;
+  await authService.resetPassword(token, password);
+  res.status(200).json({
+    message: 'Password reset successfully. You can now sign in with your new password.',
   });
 }

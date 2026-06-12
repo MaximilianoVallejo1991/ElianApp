@@ -38,7 +38,8 @@ model User {
   email              String?  @unique
   hashedPassword     String
 
-  passwordResetToken String?
+  passwordResetToken  String?
+  passwordResetExpires DateTime?
 
   isActive           Boolean  @default(true)
 
@@ -65,6 +66,7 @@ model GroupMember {
   status   MemberStatus @default(PENDING)
 
   joinedAt DateTime?
+  isFrozen Boolean      @default(false)
 
   group    Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
   user     User  @relation(fields: [userId], references: [id], onDelete: Cascade)

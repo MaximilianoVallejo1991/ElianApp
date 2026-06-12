@@ -114,25 +114,7 @@ export async function createPayment(
     throw new AppError('INVALID_SPLITS', 400, 'Amount must be a positive number');
   }
 
-  // 6. Prevent duplicate active payments
-  const existingPayment = await prisma.payment.findFirst({
-    where: {
-      groupId,
-      fromUserId,
-      toUserId,
-      deletedAt: null,
-    },
-  });
-
-  if (existingPayment) {
-    throw new AppError(
-      'DUPLICATE_PAYMENT',
-      409,
-      'An active payment between these users already exists',
-    );
-  }
-
-  // 7. For STATIC groups: get current period
+  // 6. For STATIC groups: get current period
   let periodId = null;
   if (group.balanceMode === 'STATIC') {
     const currentPeriod = await prisma.period.findFirst({
@@ -143,7 +125,7 @@ export async function createPayment(
     }
   }
 
-  // 8. Create payment with status=PENDING (DB default)
+  // 7. Create payment with status=PENDING (DB default)
   const payment = await prisma.payment.create({
     data: {
       groupId,

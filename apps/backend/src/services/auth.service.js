@@ -4,6 +4,8 @@ import { hashPassword, comparePassword } from '../utils/password.js';
 import { AppError } from '../utils/errors.js';
 import * as inviteService from './invite.service.js';
 
+const RESET_TOKEN_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
+
 // ---------------------------------------------------------------------------
 //  Auth Service
 // ---------------------------------------------------------------------------
@@ -95,12 +97,15 @@ export async function login({ email, password }) {
 /**
  * Generate a cryptographically-secure password-reset token.
  *
- * The RAW token is returned to the caller (real system would email it).
+ * The RAW token is returned to the caller (the controller will email it).
  * Only a SHA-256 HASH is stored in the database so a leaked DB dump
  * does not expose valid reset tokens.
  *
+ * The token expires after 1 hour.
+ *
  * @param {string} email
- * @returns {Promise<string | null>} the raw token, or null if email not found
+ * @returns {Promise<{ rawToken: string, userEmail: string } | null>}
+ *    null if email not found (never reveal whether the email exists)
  */
 export async function generateResetToken(email) {
   const user = await prisma.user.findUnique({ where: { email } });
@@ -112,13 +117,59 @@ export async function generateResetToken(email) {
 
   const rawToken = crypto.randomBytes(32).toString('hex');
   const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+  const expiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_MS);
 
   await prisma.user.update({
     where: { id: user.id },
-    data: { passwordResetToken: hashedToken },
+    data: {
+      passwordResetToken: hashedToken,
+      passwordResetExpires: expiresAt,
+    },
   });
 
-  return rawToken;
+  return { rawToken, userEmail: user.email };
+}
+
+/**
+ * Reset a user's password using a valid reset token.
+ *
+ * Looks up the user by HASHING the provided raw token, checks expiry,
+ * updates the password, and clears the token so it cannot be reused.
+ *
+ * @param {string} rawToken — the token from the reset link
+ * @param {string} newPassword — the new password
+ * @throws {AppError} INVALID_TOKEN | TOKEN_EXPIRED
+ */
+export async function resetPassword(rawToken, newPassword) {
+  const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+  const user = await prisma.user.findFirst({
+    where: { passwordResetToken: hashedToken },
+  });
+
+  if (!user) {
+    throw new AppError('INVALID_TOKEN', 400, 'Invalid or expired reset link');
+  }
+
+  if (!user.passwordResetExpires || new Date() > user.passwordResetExpires) {
+    // Clear the expired token so it can't be used later
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordResetToken: null, passwordResetExpires: null },
+    });
+    throw new AppError('TOKEN_EXPIRED', 410, 'Reset link has expired. Request a new one.');
+  }
+
+  const hashed = await hashPassword(newPassword);
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      hashedPassword: hashed,
+      passwordResetToken: null,
+      passwordResetExpires: null,
+    },
+  });
 }
 
 /**

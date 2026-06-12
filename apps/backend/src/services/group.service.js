@@ -228,11 +228,12 @@ export async function updateGroup(groupId, data, userId) {
 /**
  * Delete a group. Only the owner can delete.
  *
- * Prisma onDelete: Cascade on GroupMember handles membership cleanup.
+ * Blocks deletion if the group has active expenses or payments
+ * to prevent accidental data loss with unresolved financial records.
  *
  * @param {string} groupId
  * @param {string} userId — the requesting user
- * @throws {AppError} NOT_FOUND | FORBIDDEN
+ * @throws {AppError} NOT_FOUND | FORBIDDEN | GROUP_HAS_DATA
  */
 export async function deleteGroup(groupId, userId) {
   const group = await prisma.group.findUnique({ where: { id: groupId } });
@@ -243,6 +244,32 @@ export async function deleteGroup(groupId, userId) {
 
   if (group.ownerId !== userId) {
     throw new AppError('FORBIDDEN', 403, 'Only owner can delete group');
+  }
+
+  // Check for active expenses
+  const activeExpenses = await prisma.expense.count({
+    where: { groupId, deletedAt: null },
+  });
+
+  if (activeExpenses > 0) {
+    throw new AppError(
+      'GROUP_HAS_DATA',
+      409,
+      'Cannot delete group with active expenses. Settle all debts and delete expenses first.',
+    );
+  }
+
+  // Check for active payments
+  const activePayments = await prisma.payment.count({
+    where: { groupId, deletedAt: null },
+  });
+
+  if (activePayments > 0) {
+    throw new AppError(
+      'GROUP_HAS_DATA',
+      409,
+      'Cannot delete group with active payments. Settle all debts and delete payments first.',
+    );
   }
 
   await prisma.group.delete({ where: { id: groupId } });

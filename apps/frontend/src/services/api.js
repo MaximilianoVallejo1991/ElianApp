@@ -51,6 +51,9 @@ export const authService = {
 
   forgotPassword: (email) =>
     api.post('/auth/forgot-password', { email }),
+
+  resetPassword: (token, password) =>
+    api.post('/auth/reset-password', { token, password }),
 };
 
 //
@@ -148,6 +151,12 @@ export const balanceService = {
 export const membershipService = {
   remove: (groupId, userId) =>
     api.delete(`/groups/${groupId}/members/${userId}`),
+
+  freeze: (groupId, userId) =>
+    api.post(`/groups/${groupId}/members/${userId}/freeze`),
+
+  unfreeze: (groupId, userId) =>
+    api.post(`/groups/${groupId}/members/${userId}/unfreeze`),
 
   leave: (groupId) =>
     api.post(`/groups/${groupId}/leave`),

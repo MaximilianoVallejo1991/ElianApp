@@ -34,6 +34,14 @@ router.post('/reject', membershipController.reject);
 // Owner removes a member (soft-delete: status → REMOVED).
 router.delete('/members/:userId', membershipController.removeMember);
 
+// POST /groups/:groupId/members/:userId/freeze
+// Owner freezes a member (isFrozen: true). Frozen members cannot create expenses.
+router.post('/members/:userId/freeze', membershipController.freeze);
+
+// POST /groups/:groupId/members/:userId/unfreeze
+// Owner unfreezes a member (isFrozen: false).
+router.post('/members/:userId/unfreeze', membershipController.unfreeze);
+
 // POST /groups/:groupId/leave
 // Member leaves the group. Owner cannot leave.
 router.post('/leave', membershipController.leave);

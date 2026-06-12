@@ -56,6 +56,64 @@ async function getCurrentPeriodOrThrow(groupId) {
 }
 
 // ---------------------------------------------------------------------------
+//  Internal helpers — Balance verification
+// ---------------------------------------------------------------------------
+
+/**
+ * Verify that all member balances are zero for the given period.
+ *
+ * @param {string} periodId
+ * @throws {AppError} CLOSURE_BLOCKED if any balance is non-zero
+ */
+async function requireZeroBalances(periodId, groupId) {
+  const activeMembers = await prisma.groupMember.findMany({
+    where: { groupId, status: 'ACTIVE' },
+  });
+
+  const expenses = await prisma.expense.findMany({
+    where: { periodId, deletedAt: null },
+    select: { payerId: true, amount: true, splits: { select: { userId: true, amount: true } } },
+  });
+
+  const payments = await prisma.payment.findMany({
+    where: { periodId, status: 'ACCEPTED' },
+    select: { fromUserId: true, toUserId: true, amount: true },
+  });
+
+  const balanceMap = new Map();
+  for (const member of activeMembers) {
+    balanceMap.set(member.userId, { credits: 0, debits: 0, sent: 0, received: 0 });
+  }
+
+  for (const exp of expenses) {
+    const entry = balanceMap.get(exp.payerId);
+    if (entry) entry.credits += Number(exp.amount);
+    for (const split of exp.splits) {
+      const e = balanceMap.get(split.userId);
+      if (e) e.debits += Number(split.amount);
+    }
+  }
+
+  for (const pay of payments) {
+    const s = balanceMap.get(pay.fromUserId);
+    if (s) s.sent += Number(pay.amount);
+    const r = balanceMap.get(pay.toUserId);
+    if (r) r.received += Number(pay.amount);
+  }
+
+  for (const [, b] of balanceMap) {
+    const net = b.credits - b.debits - b.received + b.sent;
+    if (Math.abs(net) > 0.01) {
+      throw new AppError(
+        'CLOSURE_BLOCKED',
+        409,
+        `Balances not settled (remaining: ${net.toFixed(2)})`,
+      );
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 //  Public API — Closure State Machine
 // ---------------------------------------------------------------------------
 
@@ -108,6 +166,19 @@ export async function startClosure(groupId, userId) {
     );
   }
 
+  // Require at least one expense in current period
+  const expenseCount = await prisma.expense.count({
+    where: { periodId: period.id, deletedAt: null },
+  });
+
+  if (expenseCount === 0) {
+    throw new AppError(
+      'CLOSURE_BLOCKED',
+      409,
+      'Cannot start closure: no expenses recorded in current period',
+    );
+  }
+
   return prisma.period.update({
     where: { id: period.id },
     data: { status: 'CLOSING' },
@@ -143,21 +214,24 @@ export async function completeClosure(groupId, userId) {
     );
   }
 
-  // Check all payments are ACCEPTED
-  const nonAcceptedPayments = await prisma.payment.count({
+  // Check no PENDING payments remain (REJECTED payments are historical, not blocking)
+  const pendingPayments = await prisma.payment.count({
     where: {
       periodId: period.id,
-      status: { in: ['PENDING', 'REJECTED'] },
+      status: 'PENDING',
     },
   });
 
-  if (nonAcceptedPayments > 0) {
+  if (pendingPayments > 0) {
     throw new AppError(
       'CLOSURE_BLOCKED',
       409,
-      'All payments must be ACCEPTED',
+      'Cannot complete closure with PENDING payments',
     );
   }
+
+  // Check all balances are zero
+  await requireZeroBalances(period.id, groupId);
 
   return prisma.period.update({
     where: { id: period.id },
@@ -200,21 +274,24 @@ export async function partialClosure(groupId, userId) {
     );
   }
 
-  // Check all payments are ACCEPTED
-  const nonAcceptedPayments = await prisma.payment.count({
+  // Check no PENDING payments remain (REJECTED payments are historical, not blocking)
+  const pendingPayments = await prisma.payment.count({
     where: {
       periodId: period.id,
-      status: { in: ['PENDING', 'REJECTED'] },
+      status: 'PENDING',
     },
   });
 
-  if (nonAcceptedPayments > 0) {
+  if (pendingPayments > 0) {
     throw new AppError(
       'CLOSURE_BLOCKED',
       409,
       'All payments must be ACCEPTED',
     );
   }
+
+  // Check all balances are zero
+  await requireZeroBalances(period.id, groupId);
 
   // Atomic: close current period + create new open period
   return prisma.$transaction(async (tx) => {
@@ -268,21 +345,24 @@ export async function finalClosure(groupId, userId) {
     );
   }
 
-  // Check all payments are ACCEPTED
-  const nonAcceptedPayments = await prisma.payment.count({
+  // Check no PENDING payments remain (REJECTED payments are historical, not blocking)
+  const pendingPayments = await prisma.payment.count({
     where: {
       periodId: period.id,
-      status: { in: ['PENDING', 'REJECTED'] },
+      status: 'PENDING',
     },
   });
 
-  if (nonAcceptedPayments > 0) {
+  if (pendingPayments > 0) {
     throw new AppError(
       'CLOSURE_BLOCKED',
       409,
       'All payments must be ACCEPTED',
     );
   }
+
+  // Check all balances are zero
+  await requireZeroBalances(period.id, groupId);
 
   // Atomic: close period + mark group as closed
   return prisma.$transaction(async (tx) => {

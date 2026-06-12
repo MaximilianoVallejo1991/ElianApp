@@ -178,7 +178,7 @@ export default function GroupDetailPage() {
         const periods = periodsRes.data || [];
         const current = periods.find((p) => p.isCurrent);
         setCurrentPeriod(current || null);
-        setPeriodHistory(periods.filter((p) => p.status !== 'OPEN').reverse());
+        setPeriodHistory(periods.filter((p) => p.settlementComplete).reverse());
       } catch {
         // Silently ignore period load failures
       }
@@ -239,6 +239,16 @@ export default function GroupDetailPage() {
 
   const handleRemoveMember = async (userId) => {
     await membershipService.remove(id, userId);
+    loadGroup();
+  };
+
+  const handleFreezeMember = async (userId) => {
+    await membershipService.freeze(id, userId);
+    loadGroup();
+  };
+
+  const handleUnfreezeMember = async (userId) => {
+    await membershipService.unfreeze(id, userId);
     loadGroup();
   };
 
@@ -415,14 +425,26 @@ export default function GroupDetailPage() {
     balanceByUser[b.userId] = b.netBalance;
   });
 
-  // Check if all payments in CLOSING period are accepted (for STATIC groups)
+  // Build a userId → total spent map (sum of their split shares across all expenses)
+  const totalSpentByUser = {};
+  expenses.forEach((exp) => {
+    exp.splits?.forEach((split) => {
+      if (split.userId) {
+        totalSpentByUser[split.userId] = (totalSpentByUser[split.userId] || 0) + Number(split.amount);
+      }
+    });
+  });
+
+  // Check if all payments in CLOSING period are settled and balances are zero (for STATIC groups)
   const isClosing = currentPeriod?.status === 'CLOSING';
   const pendingPayments = isClosing ? payments.filter((p) => p.status === 'PENDING') : [];
   const rejectedPayments = isClosing ? payments.filter((p) => p.status === 'REJECTED') : [];
   const acceptedPayments = isClosing ? payments.filter((p) => p.status === 'ACCEPTED') : [];
-  const allPaymentsAccepted = isClosing
-    && payments.length > 0
-    && payments.every((p) => p.status === 'ACCEPTED');
+  const allBalancesZero = balances.every((b) => Math.abs(b.netBalance) < 0.01);
+  const readyForClosure = isClosing
+    && pendingPayments.length === 0
+    && acceptedPayments.length > 0
+    && allBalancesZero;
 
   // ------------------------------------------------------------------
   // Helpers
@@ -660,7 +682,7 @@ export default function GroupDetailPage() {
 
             {currentPeriod.status === 'CLOSING' && (
               <div className="mt-4">
-                {allPaymentsAccepted && group.ownerId === currentUserId && (
+                {readyForClosure && group.ownerId === currentUserId && (
                   <div>
                     <p className="mb-3 text-sm font-medium text-success">
                       <CheckCircleIcon className="inline h-4 w-4" aria-hidden="true" />
@@ -691,7 +713,7 @@ export default function GroupDetailPage() {
                     </p>
                   </div>
                 )}
-                {!allPaymentsAccepted && (
+                {!readyForClosure && (
                   <div>
                     {payments.length === 0 && (
                       <p className="text-sm text-text-muted">
@@ -703,14 +725,14 @@ export default function GroupDetailPage() {
                         {pendingPayments.length} payment{pendingPayments.length !== 1 ? 's' : ''} waiting for creditor acceptance.
                       </p>
                     )}
-                    {rejectedPayments.length > 0 && (
+                    {pendingPayments.length === 0 && !allBalancesZero && (
                       <p className="text-sm text-error">
-                        {rejectedPayments.length} payment{rejectedPayments.length !== 1 ? 's' : ''} rejected. Resolve and re-record.
+                        Balances not settled. Record more payments to zero out all balances.
                       </p>
                     )}
-                    {payments.length > 0 && acceptedPayments.length > 0 && !allPaymentsAccepted && pendingPayments.length === 0 && rejectedPayments.length === 0 && (
+                    {pendingPayments.length === 0 && allBalancesZero && acceptedPayments.length === 0 && (
                       <p className="text-sm text-text-muted">
-                        All payments processed. Record more if needed.
+                        No payments needed — balances are already settled.
                       </p>
                     )}
                   </div>
@@ -729,7 +751,6 @@ export default function GroupDetailPage() {
           ) : (
             <ul className="mt-4 divide-y divide-border rounded-xl border border-border bg-white">
               {members.map((member) => {
-                const netBalance = balanceByUser[member.userId];
                 return (
                   <li
                     key={member.userId}
@@ -747,24 +768,22 @@ export default function GroupDetailPage() {
                             Owner
                           </span>
                         )}
+                        {member.isFrozen && (
+                          <span className="ml-2 inline-block rounded-full bg-blue-100 px-2 py-0.5 font-heading text-[10px] font-semibold uppercase tracking-wider text-blue-600">
+                            ❄️ Frozen
+                          </span>
+                        )}
                       </p>
                       {member.user?.email && member.user.nickName && (
                         <p className="truncate text-xs text-text-muted">{member.user.email}</p>
                       )}
                     </div>
 
-                    {netBalance !== undefined && (
+                    {totalSpentByUser[member.userId] !== undefined && (
                       <span
-                        className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                          netBalance > 0
-                            ? 'bg-success/10 text-success'
-                            : netBalance < 0
-                              ? 'bg-error/10 text-error'
-                              : 'bg-border/30 text-text-muted'
-                        }`}
+                        className="inline-block rounded-full bg-primary/5 px-2.5 py-0.5 text-xs font-semibold text-text-muted"
                       >
-                        {netBalance > 0 && '+'}
-                        {formatCurrency(netBalance, currency)}
+                        spent {formatCurrency(totalSpentByUser[member.userId], currency)}
                       </span>
                     )}
                   </li>
@@ -1111,19 +1130,27 @@ export default function GroupDetailPage() {
                           Split {expense.splitType === 'EQUAL' ? 'equally' : 'by percentage'}
                         </p>
                         <div className="flex flex-wrap gap-2">
-                          {expense.splits.map((split) => (
-                            <span
-                              key={split.id || split.userId}
-                              className="inline-flex items-center gap-1 rounded-md bg-secondary/5 px-2.5 py-1 text-xs text-text"
-                            >
-                              <span className="font-medium">
-                                {split.user?.nickName || split.user?.email || split.userId}
+                          {expense.splits.map((split) => {
+                            const pct = split.percentage
+                              ? Number(split.percentage).toFixed(0)
+                              : null;
+                            return (
+                              <span
+                                key={split.id || split.userId}
+                                className="inline-flex items-center gap-1 rounded-md bg-secondary/5 px-2.5 py-1 text-xs text-text"
+                              >
+                                <span className="font-medium">
+                                  {split.user?.nickName || split.user?.email || split.userId}
+                                </span>
+                                <span className="font-semibold text-secondary">
+                                  {formatCurrency(split.amount, currency)}
+                                </span>
+                                {pct && (
+                                  <span className="text-text-muted">({pct}%)</span>
+                                )}
                               </span>
-                              <span className="font-semibold text-secondary">
-                                {formatCurrency(split.amount, currency)}
-                              </span>
-                            </span>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -1298,16 +1325,27 @@ export default function GroupDetailPage() {
         />
       )}
 
-      {showPaymentForm && (
-        <PaymentForm
-          groupId={id}
-          members={members}
-          currency={currency}
-          currentUserId={currentUserId}
-          onSuccess={loadGroup}
-          onClose={() => setShowPaymentForm(false)}
-        />
-      )}
+      {showPaymentForm && (() => {
+        const myBalance = balances.find((b) => b.userId === currentUserId);
+        const hasDebts = myBalance?.netBalance < 0;
+        const suggestedPayment = hasDebts
+          ? { toUserId: myBalance.owedTo[0]?.userId || '', amount: Math.abs(myBalance.netBalance).toString() }
+          : {};
+
+        return (
+          <PaymentForm
+            groupId={id}
+            members={members}
+            currency={currency}
+            currentUserId={currentUserId}
+            initialToUserId={suggestedPayment.toUserId || ''}
+            initialAmount={suggestedPayment.amount || ''}
+            hasNoDebts={!hasDebts}
+            onSuccess={loadGroup}
+            onClose={() => setShowPaymentForm(false)}
+          />
+        );
+      })()}
 
       {showInviteModal && (
         <InviteModal
@@ -1334,6 +1372,8 @@ export default function GroupDetailPage() {
           ownerId={group.ownerId}
           currentUserId={currentUserId}
           onRemoveMember={handleRemoveMember}
+          onFreezeMember={handleFreezeMember}
+          onUnfreezeMember={handleUnfreezeMember}
           onClose={() => setShowMemberManagement(false)}
         />
       )}
@@ -1566,33 +1606,65 @@ export default function GroupDetailPage() {
                             )}
                           </div>
 
-                          {/* Balances at closure (before payments) */}
+                          {/* Settlement summary */}
                           {pBalances.length > 0 && (
                             <div>
-                              <h4 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Balances at Closure</h4>
-                              <ul className="mt-2 space-y-1">
-                                {pBalances.map((b) => (
-                                  <li key={b.userId} className="flex flex-col gap-1 rounded-lg bg-white px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between">
-                                    <div className="flex items-center gap-3">
-                                      <span className="text-text">{b.user?.nickName || b.userId}</span>
-                                      <span className="text-xs text-text-muted">
-                                        participated in {formatCurrency(b.totalExpenseParticipation, currency)}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center gap-4">
-                                      <span className="text-xs text-text-muted">
-                                        owed: <span className={b.initialBalance > 0 ? 'text-success' : b.initialBalance < 0 ? 'text-error' : 'text-text-muted'}>
-                                          {b.initialBalance > 0 && '+'}{formatCurrency(b.initialBalance, currency)}
+                              <h4 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Settlement Summary</h4>
+                              <ul className="mt-2 space-y-3">
+                                {pBalances.map((b) => {
+                                  const isSettled = b.finalBalance === 0;
+                                  return (
+                                    <li key={b.userId} className="rounded-lg border border-border bg-white px-3 py-3">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-sm font-medium text-text">{b.user?.nickName || b.userId}</span>
+                                        <span className="text-xs text-text-muted">
+                                          Total spent: <span className="font-semibold text-text">{formatCurrency(b.totalSpent, currency)}</span>
                                         </span>
-                                      </span>
-                                      <span className="text-xs text-text-muted">
-                                        after payments: <span className={b.finalBalance > 0 ? 'text-success' : b.finalBalance < 0 ? 'text-error' : 'text-text-muted'}>
-                                          {b.finalBalance > 0 && '+'}{formatCurrency(b.finalBalance, currency)}
-                                        </span>
-                                      </span>
-                                    </div>
-                                  </li>
-                                ))}
+                                      </div>
+
+                                      {/* Owed at closure */}
+                                      <div className="mt-2 border-t border-border pt-2">
+                                        <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Owed at closure</span>
+                                        {b.owedTo.length > 0 && (
+                                          <div className="mt-1">
+                                            {b.owedTo.map((debt) => (
+                                              <p key={debt.userId} className="text-xs text-error">
+                                                owes <span className="font-medium">{debt.nickName}</span> {formatCurrency(debt.amount, currency)}
+                                              </p>
+                                            ))}
+                                          </div>
+                                        )}
+                                        {b.owedBy.length > 0 && (
+                                          <div className="mt-1">
+                                            {b.owedBy.map((debt) => (
+                                              <p key={debt.userId} className="text-xs text-success">
+                                                <span className="font-medium">{debt.nickName}</span> owes them {formatCurrency(debt.amount, currency)}
+                                              </p>
+                                            ))}
+                                          </div>
+                                        )}
+                                        {b.owedTo.length === 0 && b.owedBy.length === 0 && (
+                                          <p className="text-xs text-text-muted">No debts</p>
+                                        )}
+                                      </div>
+
+                                      {/* After payments */}
+                                      <div className="mt-2 border-t border-border pt-2">
+                                        <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">After payments</span>
+                                        {isSettled ? (
+                                          <p className="mt-1 text-xs font-semibold text-success">
+                                            <CheckCircleIcon className="inline h-3 w-3" aria-hidden="true" />
+                                            {' '}All debts settled
+                                          </p>
+                                        ) : (
+                                          <p className="mt-1 text-xs text-error">
+                                            Remaining: {b.finalBalance > 0 ? '+' : ''}{formatCurrency(b.finalBalance, currency)}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </li>
+                                  );
+                                })}
                               </ul>
                             </div>
                           )}

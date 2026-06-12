@@ -38,7 +38,7 @@ export async function listPeriods(groupId, userId) {
     throw new AppError('NOT_MEMBER', 403, 'User is not a group member');
   }
 
-  return prisma.period.findMany({
+  const periods = await prisma.period.findMany({
     where: { groupId },
     orderBy: { createdAt: 'desc' },
     select: {
@@ -53,6 +53,27 @@ export async function listPeriods(groupId, userId) {
       },
     },
   });
+
+  // For CLOSED/FINAL periods, check if all payments were accepted
+  const periodsWithSettlement = await Promise.all(
+    periods.map(async (period) => {
+      if (period.status === 'CLOSED' || period.status === 'FINAL') {
+        const rejectedCount = await prisma.payment.count({
+          where: { periodId: period.id, status: 'REJECTED' },
+        });
+        const pendingCount = await prisma.payment.count({
+          where: { periodId: period.id, status: 'PENDING' },
+        });
+        return {
+          ...period,
+          settlementComplete: pendingCount === 0,
+        };
+      }
+      return { ...period, settlementComplete: false };
+    }),
+  );
+
+  return periodsWithSettlement;
 }
 
 /**
@@ -154,27 +175,20 @@ export async function getPeriodBalances(periodId, groupId, userId) {
       debits: 0,
       payments_sent: 0,
       payments_received: 0,
-      totalExpenseParticipation: 0,
     });
   }
 
-  // Credits & total expense participation
+  // Credits: what each user paid
   for (const expense of expenses) {
     const entry = balanceMap.get(expense.payerId);
-    if (entry) {
-      entry.credits += Number(expense.amount);
-      entry.totalExpenseParticipation += Number(expense.amount);
-    }
+    if (entry) entry.credits += Number(expense.amount);
   }
 
-  // Debits & total expense participation for split participants
+  // Debits: each user's share of expenses (what they "spent" / were responsible for)
   for (const expense of expenses) {
     for (const split of expense.splits) {
       const entry = balanceMap.get(split.userId);
-      if (entry) {
-        entry.debits += Number(split.amount);
-        entry.totalExpenseParticipation += Number(split.amount);
-      }
+      if (entry) entry.debits += Number(split.amount);
     }
   }
 
@@ -201,6 +215,32 @@ export async function getPeriodBalances(periodId, groupId, userId) {
     }
   }
 
+  // Net out mutual debts (same as balance.service.js)
+  const nettedDebts = new Map();
+  for (const [fromUserId, toDebts] of debtGraph) {
+    for (const [toUserId, amount] of toDebts) {
+      if (amount <= 0) continue;
+
+      if (!nettedDebts.has(fromUserId)) {
+        nettedDebts.set(fromUserId, new Map());
+      }
+
+      const userDebts = nettedDebts.get(fromUserId);
+      const currentDebt = userDebts.get(toUserId) || 0;
+      const reverseDebt = (nettedDebts.get(toUserId)?.get(fromUserId)) || 0;
+
+      if (reverseDebt !== 0) {
+        const netDebt = (currentDebt + amount) - reverseDebt;
+        userDebts.set(toUserId, netDebt);
+        if (nettedDebts.get(toUserId)) {
+          nettedDebts.get(toUserId).set(fromUserId, 0);
+        }
+      } else {
+        userDebts.set(toUserId, currentDebt + amount);
+      }
+    }
+  }
+
   // Build result
   const userMap = new Map();
   for (const member of activeMembers) userMap.set(member.userId, member.user);
@@ -213,7 +253,7 @@ export async function getPeriodBalances(periodId, groupId, userId) {
 
     const owedTo = [];
     const owedBy = [];
-    const userDebtEntries = debtGraph.get(member.userId);
+    const userDebtEntries = nettedDebts.get(member.userId);
 
     if (userDebtEntries) {
       for (const [otherUserId, amount] of userDebtEntries) {
@@ -227,16 +267,23 @@ export async function getPeriodBalances(periodId, groupId, userId) {
               amount: Math.round(amount * 100) / 100,
             });
           }
-        } else if (amount < 0) {
-          const otherUser = userMap.get(otherUserId);
-          if (otherUser) {
-            owedBy.push({
-              userId: otherUserId,
-              nickName: otherUser.nickName,
-              email: otherUser.email,
-              amount: Math.round(Math.abs(amount) * 100) / 100,
-            });
-          }
+        }
+      }
+    }
+
+    // Check reverse direction for owedBy (who owes this user)
+    for (const [otherUserId, otherDebts] of nettedDebts) {
+      if (otherUserId === member.userId) continue;
+      const reverseAmount = otherDebts.get(member.userId) || 0;
+      if (reverseAmount > 0) {
+        const otherUser = userMap.get(otherUserId);
+        if (otherUser) {
+          owedBy.push({
+            userId: otherUserId,
+            nickName: otherUser.nickName,
+            email: otherUser.email,
+            amount: Math.round(reverseAmount * 100) / 100,
+          });
         }
       }
     }
@@ -247,9 +294,9 @@ export async function getPeriodBalances(periodId, groupId, userId) {
     result.push({
       userId: member.userId,
       user: member.user,
+      totalSpent: Math.round(b.debits * 100) / 100,
       initialBalance: Math.round(initialBalance * 100) / 100,
       finalBalance: Math.round(finalBalance * 100) / 100,
-      totalExpenseParticipation: Math.round(b.totalExpenseParticipation * 100) / 100,
       owedTo,
       owedBy,
     });

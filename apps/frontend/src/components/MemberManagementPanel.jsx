@@ -7,15 +7,17 @@ import {
 
 /**
  * MemberManagementPanel — settings panel for group owner to manage members.
- * Shows per-member details with a per-member "Remove" action.
+ * Shows per-member details with a per-member "Remove" and "Freeze/Unfreeze" action.
  * Only the group owner can see or use this panel.
  *
  * Props:
  *   groupId        — the group ID
- *   members        — array of group members (each with userId + user object)
+ *   members        — array of group members (each with userId + user object + isFrozen)
  *   ownerId        — the group owner's userId
  *   currentUserId  — the authenticated user's ID
  *   onRemoveMember — callback(userId) when remove is confirmed
+ *   onFreezeMember — callback(userId) when freeze is triggered
+ *   onUnfreezeMember — callback(userId) when unfreeze is triggered
  *   onClose        — callback to close panel
  */
 export default function MemberManagementPanel({
@@ -23,10 +25,13 @@ export default function MemberManagementPanel({
   ownerId,
   currentUserId,
   onRemoveMember,
+  onFreezeMember,
+  onUnfreezeMember,
   onClose,
 }) {
   const [confirmRemoveFor, setConfirmRemoveFor] = useState(null);
   const [removingId, setRemovingId] = useState(null);
+  const [freezingId, setFreezingId] = useState(null);
   const [error, setError] = useState('');
 
   const isOwner = currentUserId === ownerId;
@@ -41,6 +46,22 @@ export default function MemberManagementPanel({
       setError(err.message || 'Failed to remove member.');
     } finally {
       setRemovingId(null);
+    }
+  };
+
+  const handleFreezeToggle = async (userId, isFrozen) => {
+    setFreezingId(userId);
+    setError('');
+    try {
+      if (isFrozen) {
+        await onUnfreezeMember(userId);
+      } else {
+        await onFreezeMember(userId);
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to update member freeze status.');
+    } finally {
+      setFreezingId(null);
     }
   };
 
@@ -124,6 +145,11 @@ export default function MemberManagementPanel({
                                 Owner
                               </span>
                             )}
+                            {member.isFrozen && (
+                              <span className="ml-2 inline-block rounded-full bg-blue-100 px-2 py-0.5 font-heading text-[10px] font-semibold uppercase tracking-wider text-blue-600">
+                                ❄️ Frozen
+                              </span>
+                            )}
                           </p>
                           {member.user?.email && (
                             <p className="truncate text-xs text-text-muted">
@@ -138,9 +164,28 @@ export default function MemberManagementPanel({
                         </div>
                       </div>
 
-                      {/* Remove action — owner only, cannot remove self or other owner */}
+                      {/* Remove and Freeze actions — owner only, cannot act on self or other owner */}
                       {!isMemberOwner && (
-                        <div className="flex-shrink-0 ml-3">
+                        <div className="flex-shrink-0 ml-3 flex items-center gap-1">
+                          {/* Freeze/Unfreeze button */}
+                          <button
+                            type="button"
+                            onClick={() => handleFreezeToggle(member.userId, member.isFrozen)}
+                            disabled={freezingId === member.userId}
+                            className={`cursor-pointer rounded-lg p-1.5 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/30 ${
+                              member.isFrozen
+                                ? 'bg-blue-100 text-blue-600 hover:bg-blue-200'
+                                : 'text-text-muted hover:bg-blue-50 hover:text-blue-500'
+                            }`}
+                            aria-label={member.isFrozen ? `Unfreeze ${member.user?.nickName || member.user?.email || 'member'}` : `Freeze ${member.user?.nickName || member.user?.email || 'member'}`}
+                            title={member.isFrozen ? 'Unfreeze member' : 'Freeze member (prevents creating expenses)'}
+                          >
+                            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M19.07 4.93L4.93 19.07" />
+                              <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
+                            </svg>
+                          </button>
+
                           {isConfirming ? (
                             <div className="flex items-center gap-2">
                               <button

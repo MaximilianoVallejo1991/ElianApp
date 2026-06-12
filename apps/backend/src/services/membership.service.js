@@ -263,7 +263,20 @@ export async function leaveGroup(groupId, userId) {
     throw new AppError('NOT_FOUND', 404, 'You are not an active member of this group');
   }
 
-  // Check net balance — negative balance means member owes money
+  // 1. Check for PENDING payments the user has sent (unresolved payments)
+  const pendingSent = await prisma.payment.count({
+    where: { groupId, fromUserId: userId, status: 'PENDING', deletedAt: null },
+  });
+
+  if (pendingSent > 0) {
+    throw new AppError(
+      'CANNOT_LEAVE_WITH_DEBTS',
+      400,
+      'Cannot leave group with pending payments; wait for creditor acceptance or delete them',
+    );
+  }
+
+  // 2. Check net balance — negative balance means member owes money
   // Compute from expenses and payments (same logic as balance.service.js)
   const expenses = await prisma.expense.findMany({
     where: { groupId, deletedAt: null },
@@ -322,6 +335,101 @@ export async function leaveGroup(groupId, userId) {
 }
 
 /**
+ * Freeze a member. Frozen members cannot create new expenses
+ * but can still participate in expenses created by others and
+ * can register payments to settle debts.
+ * Only the group owner can freeze/unfreeze members.
+ *
+ * @param {string} groupId
+ * @param {string} targetUserId — the member being frozen
+ * @param {string} requesterId — the user requesting (must be owner)
+ * @throws {AppError} NOT_FOUND | FORBIDDEN | CANNOT_FREEZE_SELF
+ */
+export async function freezeMember(groupId, targetUserId, requesterId) {
+  const group = await prisma.group.findUnique({ where: { id: groupId } });
+
+  if (!group) {
+    throw new AppError('NOT_FOUND', 404, 'Group not found');
+  }
+
+  if (group.ownerId !== requesterId) {
+    throw new AppError('FORBIDDEN', 403, 'Only owner can freeze members');
+  }
+
+  if (targetUserId === group.ownerId) {
+    throw new AppError(
+      'CANNOT_FREEZE_SELF',
+      400,
+      'Owner cannot freeze themselves',
+    );
+  }
+
+  const membership = await prisma.groupMember.findUnique({
+    where: {
+      groupId_userId: { groupId, userId: targetUserId },
+    },
+  });
+
+  if (!membership) {
+    throw new AppError('NOT_FOUND', 404, 'Member not found in group');
+  }
+
+  if (membership.status !== 'ACTIVE') {
+    throw new AppError('INVALID_OPERATION', 400, 'Only active members can be frozen');
+  }
+
+  return prisma.groupMember.update({
+    where: {
+      groupId_userId: { groupId, userId: targetUserId },
+    },
+    data: { isFrozen: true },
+    include: {
+      user: { select: { id: true, email: true, nickName: true } },
+    },
+  });
+}
+
+/**
+ * Unfreeze a member. Only the group owner can unfreeze.
+ *
+ * @param {string} groupId
+ * @param {string} targetUserId — the member being unfrozen
+ * @param {string} requesterId — the user requesting (must be owner)
+ * @throws {AppError} NOT_FOUND | FORBIDDEN
+ */
+export async function unfreezeMember(groupId, targetUserId, requesterId) {
+  const group = await prisma.group.findUnique({ where: { id: groupId } });
+
+  if (!group) {
+    throw new AppError('NOT_FOUND', 404, 'Group not found');
+  }
+
+  if (group.ownerId !== requesterId) {
+    throw new AppError('FORBIDDEN', 403, 'Only owner can unfreeze members');
+  }
+
+  const membership = await prisma.groupMember.findUnique({
+    where: {
+      groupId_userId: { groupId, userId: targetUserId },
+    },
+  });
+
+  if (!membership) {
+    throw new AppError('NOT_FOUND', 404, 'Member not found in group');
+  }
+
+  return prisma.groupMember.update({
+    where: {
+      groupId_userId: { groupId, userId: targetUserId },
+    },
+    data: { isFrozen: false },
+    include: {
+      user: { select: { id: true, email: true, nickName: true } },
+    },
+  });
+}
+
+/**
  * Get all ACTIVE members of a group.
  *
  * @param {string} groupId
@@ -347,6 +455,15 @@ export async function getGroupMembers(groupId) {
     },
     orderBy: { joinedAt: 'asc' },
   });
+
+  return members.map((m) => ({
+    userId: m.userId,
+    groupId: m.groupId,
+    status: m.status,
+    isFrozen: m.isFrozen,
+    joinedAt: m.joinedAt,
+    user: m.user,
+  }));
 
   return members;
 }

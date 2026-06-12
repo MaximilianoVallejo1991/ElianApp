@@ -5,6 +5,7 @@ import {
   registerSchema,
   loginSchema,
   forgotPasswordSchema,
+  resetPasswordSchema,
 } from '../schemas/auth.schemas.js';
 import * as authController from '../controllers/auth.controller.js';
 
@@ -35,6 +36,14 @@ router.post(
   '/forgot-password',
   validate(forgotPasswordSchema),
   authController.forgotPassword,
+);
+
+// POST /auth/reset-password
+// Resets password using a valid token from email link.
+router.post(
+  '/reset-password',
+  validate(resetPasswordSchema),
+  authController.resetPassword,
 );
 
 // --- Protected --------------------------------------------------------------

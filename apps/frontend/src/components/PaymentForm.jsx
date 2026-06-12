@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   XMarkIcon,
   CurrencyDollarIcon,
@@ -21,14 +21,18 @@ export default function PaymentForm({
   members,
   currency = 'USD',
   currentUserId,
+  initialToUserId = '',
+  initialAmount = '',
+  hasNoDebts = false,
   onSuccess,
   onClose,
 }) {
-  const [toUserId, setToUserId] = useState('');
-  const [amount, setAmount] = useState('');
+  const [toUserId, setToUserId] = useState(initialToUserId);
+  const [amount, setAmount] = useState(initialAmount);
   const [method, setMethod] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const isSubmitting = useRef(false);
 
   // Exclude current user from receiver options
   const receivers = members.filter((m) => m.userId !== currentUserId);
@@ -54,6 +58,7 @@ export default function PaymentForm({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting.current) return;
     setError('');
 
     const validationError = validate();
@@ -62,6 +67,7 @@ export default function PaymentForm({
       return;
     }
 
+    isSubmitting.current = true;
     setLoading(true);
     try {
       const payload = {
@@ -72,12 +78,13 @@ export default function PaymentForm({
       };
 
       await paymentService.create(groupId, payload);
-      setLoading(false);
       onSuccess?.();
       onClose?.();
     } catch (err) {
       setError(err.message || 'Failed to record payment.');
+    } finally {
       setLoading(false);
+      isSubmitting.current = false;
     }
   };
 
@@ -127,6 +134,15 @@ export default function PaymentForm({
             Record a payment you made to another group member. Balances will update
             automatically.
           </p>
+
+          {hasNoDebts && (
+            <div
+              className="rounded-lg border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-warning"
+              role="alert"
+            >
+              You don't currently owe anyone. Payments can still be recorded, but they may not be needed.
+            </div>
+          )}
 
           {/* To user */}
           <div>

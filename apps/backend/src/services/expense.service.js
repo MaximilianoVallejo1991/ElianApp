@@ -145,6 +145,15 @@ export async function createExpense(groupId, data, userId) {
     throw new AppError('NOT_MEMBER', 400, 'Payer must be an active group member');
   }
 
+  // 2b. Check payer is not frozen
+  if (payerMembership.isFrozen) {
+    throw new AppError(
+      'MEMBER_FROZEN',
+      403,
+      'This member is frozen ❄️ and cannot create new expenses',
+    );
+  }
+
   // 3. For STATIC groups: period handling
   let periodId = null;
   if (group.balanceMode === 'STATIC') {

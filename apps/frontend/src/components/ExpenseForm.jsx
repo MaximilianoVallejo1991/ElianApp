@@ -562,7 +562,7 @@ const validateStep2 = () => {
                           key={m.userId}
                           className={`flex cursor-pointer items-center gap-3 rounded-md px-3 py-2.5 transition-colors duration-150 ${
                             checked ? 'bg-secondary/5' : 'hover:bg-border/30'
-                          }`}
+                          } ${m.isFrozen ? 'opacity-60' : ''}`}
                         >
                           <input
                             type="checkbox"
@@ -573,6 +573,11 @@ const validateStep2 = () => {
                           <span className="truncate text-sm font-medium text-text">
                             {memberName(m)}
                             {m.userId === currentUserId ? ' (you)' : ''}
+                            {m.isFrozen && (
+                              <span className="ml-1.5 inline-block text-blue-500" title="This member is frozen and cannot create expenses">
+                                ❄️
+                              </span>
+                            )}
                           </span>
                         </label>
                       );
@@ -623,6 +628,7 @@ const validateStep2 = () => {
                           <UserIcon className="h-4 w-4 flex-shrink-0 text-text-muted" aria-hidden="true" />
                           <span className="truncate text-sm text-text">
                             {memberName(m)}
+                            {m.isFrozen && <span className="ml-1.5 inline-block text-blue-500">❄️</span>}
                           </span>
                         </div>
                         <div className="relative w-28 flex-shrink-0">
@@ -726,7 +732,7 @@ const validateStep2 = () => {
                                 key={m.userId}
                                 className={`flex cursor-pointer items-center gap-3 rounded-md px-3 py-2.5 transition-colors duration-150 ${
                                   checked ? 'bg-secondary/5' : 'hover:bg-border/30'
-                                }`}
+                                } ${m.isFrozen ? 'opacity-60' : ''}`}
                               >
                                 <input
                                   type="checkbox"
@@ -737,6 +743,11 @@ const validateStep2 = () => {
                                 <span className="truncate text-sm font-medium text-text">
                                   {memberName(m)}
                                   {m.userId === currentUserId ? ' (you)' : ''}
+                                  {m.isFrozen && (
+                                    <span className="ml-1.5 inline-block text-blue-500" title="This member is frozen">
+                                      ❄️
+                                    </span>
+                                  )}
                                 </span>
                               </label>
                             );

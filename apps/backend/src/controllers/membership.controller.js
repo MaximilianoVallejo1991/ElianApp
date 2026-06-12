@@ -65,6 +65,37 @@ export async function removeMember(req, res) {
 }
 
 /**
+ * POST /groups/:groupId/members/:userId/freeze  (PROTECTED, owner only)
+ *
+ * Owner freezes a member. Frozen members cannot create new expenses
+ * but can still participate in expenses created by others and can pay debts.
+ */
+export async function freeze(req, res) {
+  const { groupId, userId: targetUserId } = req.params;
+  const member = await membershipService.freezeMember(
+    groupId,
+    targetUserId,
+    req.user.userId,
+  );
+  res.status(200).json(member);
+}
+
+/**
+ * POST /groups/:groupId/members/:userId/unfreeze  (PROTECTED, owner only)
+ *
+ * Owner unfreezes a member.
+ */
+export async function unfreeze(req, res) {
+  const { groupId, userId: targetUserId } = req.params;
+  const member = await membershipService.unfreezeMember(
+    groupId,
+    targetUserId,
+    req.user.userId,
+  );
+  res.status(200).json(member);
+}
+
+/**
  * POST /groups/:groupId/leave  (PROTECTED)
  *
  * The authenticated user leaves the group. Owners cannot leave.
