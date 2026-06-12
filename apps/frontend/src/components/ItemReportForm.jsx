@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { CurrencyDollarIcon } from '@heroicons/react/24/outline';
+import { NumericFormat } from 'react-number-format';
 import { expenseService } from '../services/api';
 
 /**
@@ -26,7 +27,7 @@ export default function ItemReportForm({
   const isEditing = existingItem !== null && existingItem !== undefined;
 
   const [amount, setAmount] = useState(() =>
-    existingItem?.amount !== undefined ? String(existingItem.amount) : ''
+    existingItem?.amount !== undefined ? existingItem.amount : ''
   );
   const [description, setDescription] = useState(
     () => existingItem?.description || ''
@@ -34,6 +35,7 @@ export default function ItemReportForm({
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
+  const isSubmitting = useRef(false);
 
   // ------------------------------------------------------------------
   // Validation
@@ -54,6 +56,7 @@ export default function ItemReportForm({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting.current) return;
     setError('');
 
     const validationError = validate();
@@ -62,6 +65,7 @@ export default function ItemReportForm({
       return;
     }
 
+    isSubmitting.current = true;
     setLoading(true);
     try {
       const payload = {
@@ -75,11 +79,12 @@ export default function ItemReportForm({
         await expenseService.reportItem(groupId, expenseId, payload);
       }
 
-      setLoading(false);
       onSuccess?.();
     } catch (err) {
       setError(err.message || 'Failed to save item.');
+    } finally {
       setLoading(false);
+      isSubmitting.current = false;
     }
   };
 
@@ -127,56 +132,55 @@ export default function ItemReportForm({
         </div>
       )}
 
-      <div className="flex items-end gap-3">
-        {/* Amount */}
-        <div className="flex-1 min-w-0">
-          <label
-            htmlFor={`item-amount-${expenseId}`}
-            className="mb-1 block text-xs font-semibold text-text"
-          >
-            Amount
-          </label>
-          <div className="relative">
-            <CurrencyDollarIcon
-              className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted"
-              aria-hidden="true"
-            />
-            <input
-              id={`item-amount-${expenseId}`}
-              type="number"
-              required
-              min="0.01"
-              step="0.01"
-              autoFocus
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0.00"
-              className="w-full rounded-lg border border-border bg-white py-2 pl-8 pr-12 text-sm text-text transition-colors duration-200 placeholder:text-text-muted/50 focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary/20"
-            />
-            <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-medium text-text-muted">
-              {currency}
-            </span>
-          </div>
-        </div>
-
-        {/* Description */}
-        <div className="flex-[2] min-w-0">
-          <label
-            htmlFor={`item-desc-${expenseId}`}
-            className="mb-1 block text-xs font-semibold text-text"
-          >
-            Description{' '}
-            <span className="font-normal text-text-muted">(opt.)</span>
-          </label>
-          <input
-            id={`item-desc-${expenseId}`}
-            type="text"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="mi gasto"
-            className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-text transition-colors duration-200 placeholder:text-text-muted/50 focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary/20"
+      {/* Amount — full width on top */}
+      <div>
+        <label
+          htmlFor={`item-amount-${expenseId}`}
+          className="mb-1 block text-xs font-semibold text-text"
+        >
+          Amount
+        </label>
+        <div className="relative">
+          <CurrencyDollarIcon
+            className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted"
+            aria-hidden="true"
           />
+          <NumericFormat
+            id={`item-amount-${expenseId}`}
+            required
+            autoFocus
+            value={amount}
+            onValueChange={(values) => setAmount(values.floatValue ?? '')}
+            thousandSeparator=","
+            decimalScale={2}
+            fixedDecimalScale
+            allowNegative={false}
+            placeholder="0.00"
+            className="w-full rounded-lg border border-border bg-white py-2 pl-8 pr-12 text-sm text-text transition-colors duration-200 placeholder:text-text-muted/50 focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary/20 [!&::-webkit-outer-spin-button]:appearance-none [&_input[type=number]]:-moz-appearance:textfield [&_input[type=number]]::outer-spin-button:appearance-none [&_input[type=number]]::inner-spin-button:appearance-none"
+          />
+          <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-medium text-text-muted">
+            {currency}
+          </span>
         </div>
+      </div>
+
+      {/* Description — full width below */}
+      <div>
+        <label
+          htmlFor={`item-desc-${expenseId}`}
+          className="mb-1 block text-xs font-semibold text-text"
+        >
+          Description{' '}
+          <span className="font-normal text-text-muted">(opt.)</span>
+        </label>
+        <input
+          id={`item-desc-${expenseId}`}
+          type="text"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="mi gasto"
+          className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-text transition-colors duration-200 placeholder:text-text-muted/50 focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary/20"
+        />
       </div>
 
       {/* Buttons */}

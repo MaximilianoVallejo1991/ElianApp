@@ -17,6 +17,7 @@ import {
   CheckCircleIcon,
   PencilIcon,
   TrashIcon,
+  Cog6ToothIcon,
   ArrowRightStartOnRectangleIcon,
   ArchiveBoxIcon,
   ChevronDownIcon,
@@ -102,6 +103,10 @@ export default function GroupDetailPage() {
   const [deletingPaymentId, setDeletingPaymentId] = useState(null);
   const [showLeaveGroupConfirm, setShowLeaveGroupConfirm] = useState(false);
   const [showMemberManagement, setShowMemberManagement] = useState(false);
+  const [showStartClosureConfirm, setShowStartClosureConfirm] = useState(false);
+
+  // Actions dropdown state
+  const [showActionsMenu, setShowActionsMenu] = useState(false);
 
   // Pagination state for expenses
   const [expenses, setExpenses] = useState([]);
@@ -479,7 +484,7 @@ export default function GroupDetailPage() {
         itemsSum + Number(expense.sharedCosts) - Number(expense.amount)
       );
       return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-error/10 px-2.5 py-0.5 text-xs font-semibold text-error">
+        <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-error/10 px-2.5 py-0.5 text-xs font-semibold text-error">
           <ExclamationTriangleIcon className="h-3 w-3" aria-hidden="true" />
           Mismatch ({formatCurrency(discrepancy, currency)})
         </span>
@@ -510,6 +515,146 @@ export default function GroupDetailPage() {
       </span>
     );
   }
+
+  /**
+   * Render the payments section — reused in two positions:
+   * elevated (after Settlement Period during CLOSING) and normal (for DYNAMIC groups).
+   */
+  const renderPayments = (sectionClasses) => (
+    <section className={sectionClasses}>
+      <div className="flex items-center justify-between">
+        <h2 className="font-heading text-xl font-bold text-primary">Payments</h2>
+        {(group.balanceMode !== 'STATIC' || currentPeriod?.status === 'CLOSING') && (
+          <button
+            type="button"
+            onClick={() => setShowPaymentForm(true)}
+            className="inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium text-cta transition-colors duration-200 hover:text-cta/80 focus:outline-none focus:ring-2 focus:ring-cta/30 rounded-lg px-2 py-1"
+          >
+            <PlusIcon className="h-4 w-4" aria-hidden="true" />
+            Record
+          </button>
+        )}
+      </div>
+
+      {payments.length === 0 && (
+        <div className="mt-4 rounded-xl border border-border bg-white px-5 py-6 text-center">
+          <ArrowPathIcon className="mx-auto h-8 w-8 text-text-muted/40" aria-hidden="true" />
+          <p className="mt-2 text-sm text-text-muted">
+            {group.balanceMode === 'STATIC' && currentPeriod?.status !== 'CLOSING' && (
+              currentPeriod?.status === 'OPEN' ? 'Payments can only be recorded during a closure period.'
+              : currentPeriod?.status === 'CLOSED' ? 'No payments in this closed period.'
+              : 'Group is permanently closed.'
+            )}
+            {(group.balanceMode !== 'STATIC' || currentPeriod?.status === 'CLOSING') && (
+              'No payments recorded yet. Click "Record" to add the first payment.'
+            )}
+          </p>
+        </div>
+      )}
+
+      {payments.length > 0 && (<>
+        <div className="mt-4 rounded-xl border border-border bg-white">
+          <ul className="divide-y divide-border">
+            {payments.map((payment) => {
+              const isSender = payment.fromUserId === currentUserId;
+              const isReceiver = payment.toUserId === currentUserId;
+              const isGroupOwner = group.ownerId === currentUserId;
+              const canDeletePayment = isSender || isGroupOwner;
+              const isPending = payment.status === 'PENDING';
+              const isAccepted = payment.status === 'ACCEPTED';
+              const isRejected = payment.status === 'REJECTED';
+
+              return (
+              <li
+                key={payment.id}
+                className="flex items-center justify-between px-5 py-4 first:rounded-t-xl last:rounded-b-xl"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-cta/10">
+                    <ArrowPathIcon className="h-4 w-4 text-cta" aria-hidden="true" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm text-text">
+                      <span className="font-semibold">
+                        {payment.fromUser?.nickName || payment.fromUser?.email || 'Unknown'}
+                      </span>
+                      {' → '}
+                      <span className="font-semibold">
+                        {payment.toUser?.nickName || payment.toUser?.email || 'Unknown'}
+                      </span>
+                    </p>
+                    <p className="text-xs text-text-muted">
+                      {formatDate(payment.paidAt)}
+                      {payment.method ? ` · ${payment.method}` : ''}
+                      {isClosing && (
+                        <span className="ml-2">
+                          {isPending && <span className="text-warning">· Pending</span>}
+                          {isAccepted && <span className="text-success">· Accepted</span>}
+                          {isRejected && <span className="text-error">· Rejected</span>}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  <span className="font-heading text-sm font-bold text-cta">
+                    {formatCurrency(payment.amount, currency)}
+                  </span>
+                  {isClosing && isReceiver && isPending && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleAcceptPayment(payment.id)}
+                        className="cursor-pointer rounded p-1 text-success transition-colors duration-200 hover:bg-success/10 focus:outline-none focus:ring-2 focus:ring-success/30"
+                        aria-label="Accept payment"
+                      >
+                        <CheckCircleIcon className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRejectingPaymentId(payment.id);
+                          setRejectReason('');
+                        }}
+                        className="cursor-pointer rounded p-1 text-error transition-colors duration-200 hover:bg-error/10 focus:outline-none focus:ring-2 focus:ring-error/30"
+                        aria-label="Reject payment"
+                      >
+                        <XMarkIcon className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    </>
+                  )}
+                  {canDeletePayment && !isClosing && (
+                    <button
+                      type="button"
+                      onClick={() => setDeletingPaymentId(payment.id)}
+                      className="cursor-pointer rounded p-1 text-text-muted transition-colors duration-200 hover:bg-error/10 hover:text-error focus:outline-none focus:ring-2 focus:ring-error/30"
+                      aria-label="Delete payment"
+                    >
+                      <TrashIcon className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
+              </li>
+              );
+            })}
+          </ul>
+        </div>
+        {hasMorePayments && (
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={handleLoadMorePayments}
+              disabled={paymentsLoading}
+              className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-white px-5 py-2.5 text-sm font-semibold text-cta transition-all duration-200 hover:bg-cta/5 focus:outline-none focus:ring-2 focus:ring-cta/30 disabled:opacity-50"
+            >
+              {paymentsLoading ? 'Loading...' : 'Load more payments'}
+            </button>
+          </div>
+        )}
+        </>
+      )}
+    </section>
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -576,38 +721,94 @@ export default function GroupDetailPage() {
               )}
               {group.ownerId === currentUserId && (
                 <>
-                  <button
-                    type="button"
-                    onClick={() => setShowMemberManagement(true)}
-                    className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-border bg-white px-4 py-3 font-heading text-sm font-semibold text-text-muted transition-all duration-200 hover:bg-border/50 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2 sm:w-auto"
-                  >
-                    <UserGroupIcon className="h-5 w-5" aria-hidden="true" />
-                    Members
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowEditGroup(true)}
-                    className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-secondary bg-white px-4 py-3 font-heading text-sm font-semibold text-secondary transition-all duration-200 hover:bg-secondary/5 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2 sm:w-auto"
-                  >
-                    <PencilIcon className="h-5 w-5" aria-hidden="true" />
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowInviteModal(true)}
-                    className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-secondary bg-white px-5 py-3 font-heading text-sm font-semibold text-secondary transition-all duration-200 hover:bg-secondary/5 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2 sm:w-auto"
-                  >
-                    <UserGroupIcon className="h-5 w-5" aria-hidden="true" />
-                    Invite
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowDeleteGroupConfirm(true)}
-                    className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-error bg-white px-4 py-3 font-heading text-sm font-semibold text-error transition-all duration-200 hover:bg-error/5 focus:outline-none focus:ring-2 focus:ring-error focus:ring-offset-2 sm:w-auto"
-                  >
-                    <TrashIcon className="h-5 w-5" aria-hidden="true" />
-                    Delete
-                  </button>
+                  {/* Actions dropdown — all admin actions in one place */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowActionsMenu((prev) => !prev)}
+                      className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-border bg-white px-4 py-3 font-heading text-sm font-semibold text-text-muted transition-all duration-200 hover:bg-border/50 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2 sm:w-auto"
+                    >
+                      <Cog6ToothIcon className="h-5 w-5" aria-hidden="true" />
+                      Actions
+                      <ChevronDownIcon
+                        className={`h-4 w-4 transition-transform duration-200 ${showActionsMenu ? 'rotate-180' : ''}`}
+                        aria-hidden="true"
+                      />
+                    </button>
+
+                    {showActionsMenu && (
+                      <>
+                        {/* Invisible backdrop */}
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setShowActionsMenu(false)}
+                        />
+                        <div
+                          className="absolute right-0 top-full z-50 mt-1.5 w-52 origin-top-right rounded-xl border border-border bg-white py-1.5 shadow-xl transition-all duration-200"
+                          role="menu"
+                        >
+                          {/* Manage members */}
+                          <button
+                            type="button"
+                            onClick={() => { setShowMemberManagement(true); setShowActionsMenu(false); }}
+                            className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-sm text-text transition-colors duration-150 hover:bg-border/30"
+                            role="menuitem"
+                          >
+                            <UserGroupIcon className="h-4 w-4 text-text-muted" aria-hidden="true" />
+                            Manage members
+                          </button>
+
+                          {/* Invite members */}
+                          <button
+                            type="button"
+                            onClick={() => { setShowInviteModal(true); setShowActionsMenu(false); }}
+                            className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-sm text-text transition-colors duration-150 hover:bg-border/30"
+                            role="menuitem"
+                          >
+                            <UserGroupIcon className="h-4 w-4 text-text-muted" aria-hidden="true" />
+                            Invite members
+                          </button>
+
+                          {/* Start Closure — only when period is OPEN */}
+                          {group.balanceMode === 'STATIC' && currentPeriod?.status === 'OPEN' && (
+                            <button
+                              type="button"
+                              onClick={() => { setShowStartClosureConfirm(true); setShowActionsMenu(false); }}
+                              className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-sm text-text transition-colors duration-150 hover:bg-border/30"
+                              role="menuitem"
+                            >
+                              <LockClosedIcon className="h-4 w-4 text-text-muted" aria-hidden="true" />
+                              Start Closure
+                            </button>
+                          )}
+
+                          <hr className="mx-3 my-1.5 border-border" />
+
+                          {/* Edit group */}
+                          <button
+                            type="button"
+                            onClick={() => { setShowEditGroup(true); setShowActionsMenu(false); }}
+                            className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-sm text-text transition-colors duration-150 hover:bg-border/30"
+                            role="menuitem"
+                          >
+                            <PencilIcon className="h-4 w-4 text-text-muted" aria-hidden="true" />
+                            Edit group
+                          </button>
+
+                          {/* Delete group */}
+                          <button
+                            type="button"
+                            onClick={() => { setShowDeleteGroupConfirm(true); setShowActionsMenu(false); }}
+                            className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-sm text-error transition-colors duration-150 hover:bg-error/5"
+                            role="menuitem"
+                          >
+                            <TrashIcon className="h-4 w-4" aria-hidden="true" />
+                            Delete group
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </>
               )}
               {group.ownerId !== currentUserId && (
@@ -624,26 +825,17 @@ export default function GroupDetailPage() {
           </div>
         </div>
 
-        {/* ---- Closure section (STATIC groups only) ---- */}
+        {/* ---- Closure section (STATIC groups only) — compact ---- */}
         {group.balanceMode === 'STATIC' && currentPeriod && (
-          <div className="mt-8 rounded-xl border border-border bg-white p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/5">
-                  <LockClosedIcon className="h-5 w-5 text-primary" aria-hidden="true" />
-                </div>
-                <div>
-                  <h2 className="font-heading text-lg font-bold text-primary">Settlement Period</h2>
-                  <p className="text-xs text-text-muted">
-                    {currentPeriod.status === 'OPEN' && 'Open — expenses can be added'}
-                    {currentPeriod.status === 'CLOSING' && 'Closing — recording payments, awaiting acceptance'}
-                    {currentPeriod.status === 'CLOSED' && 'Closed'}
-                    {currentPeriod.status === 'FINAL' && 'Final — group is permanently closed'}
-                  </p>
-                </div>
+          <div className="mt-6 mb-4 rounded-lg border border-border bg-white px-4 py-3">
+            {/* Row 1: Title + status badge */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <LockClosedIcon className="h-4 w-4 flex-shrink-0 text-primary" aria-hidden="true" />
+                <span className="truncate text-sm font-semibold text-text">Settlement Period</span>
               </div>
               <span
-                className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${
+                className={`inline-block flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
                   currentPeriod.status === 'OPEN'
                     ? 'bg-success/10 text-success'
                     : currentPeriod.status === 'CLOSING'
@@ -657,93 +849,72 @@ export default function GroupDetailPage() {
               </span>
             </div>
 
-            {closureError && (
-              <div className="mt-4 rounded-lg border border-error/30 bg-error/5 px-4 py-3 text-sm text-error" role="alert">
-                {closureError}
-              </div>
-            )}
+            {/* Row 2: Status description */}
+            <p className="mt-1 text-xs text-text-muted">
+              {currentPeriod.status === 'OPEN' && 'Open — expenses can be added and edited'}
+              {currentPeriod.status === 'CLOSING' && 'Closing — recording payments, awaiting acceptance'}
+              {currentPeriod.status === 'CLOSED' && 'Closed period — no further changes'}
+              {currentPeriod.status === 'FINAL' && 'Final — group is permanently closed'}
+            </p>
 
-            {currentPeriod.status === 'OPEN' && group.ownerId === currentUserId && (
-              <div className="mt-4">
+            {/* Row 3: Partial / Final buttons (CLOSING + owner + ready) */}
+            {currentPeriod.status === 'CLOSING' && readyForClosure && group.ownerId === currentUserId && (
+              <div className="mt-3 flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={handleStartClosure}
+                  onClick={() => handleCompleteClosure('partial')}
                   disabled={closureLoading}
-                  className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-warning bg-white px-5 py-3 font-heading text-sm font-semibold text-warning transition-all duration-200 hover:bg-warning/5 focus:outline-none focus:ring-2 focus:ring-warning focus:ring-offset-2 disabled:opacity-50"
+                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-secondary bg-white px-3 py-1.5 text-xs font-semibold text-secondary transition-all duration-200 hover:bg-secondary/5 focus:outline-none focus:ring-2 focus:ring-secondary/30 disabled:opacity-50"
                 >
-                  <LockClosedIcon className="h-5 w-5" aria-hidden="true" />
-                  {closureLoading ? 'Starting...' : 'Start Closure'}
+                  <ArrowPathIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                  {closureLoading ? '...' : 'Partial'}
                 </button>
-                <p className="mt-2 text-xs text-text-muted">
-                  Freezes expense creation. Members must settle debts before closure completes.
-                </p>
+                <button
+                  type="button"
+                  onClick={() => handleCompleteClosure('final')}
+                  disabled={closureLoading}
+                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-error bg-white px-3 py-1.5 text-xs font-semibold text-error transition-all duration-200 hover:bg-error/5 focus:outline-none focus:ring-2 focus:ring-error/30 disabled:opacity-50"
+                >
+                  <ArchiveBoxIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                  {closureLoading ? '...' : 'Final'}
+                </button>
               </div>
             )}
 
+            {/* Status messages for CLOSING period (shown to all) */}
             {currentPeriod.status === 'CLOSING' && (
-              <div className="mt-4">
-                {readyForClosure && group.ownerId === currentUserId && (
-                  <div>
-                    <p className="mb-3 text-sm font-medium text-success">
-                      <CheckCircleIcon className="inline h-4 w-4" aria-hidden="true" />
-                      {' '}All payments accepted. Choose closure type:
-                    </p>
-                    <div className="flex gap-3">
-                      <button
-                        type="button"
-                        onClick={() => handleCompleteClosure('partial')}
-                        disabled={closureLoading}
-                        className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-secondary bg-white px-4 py-2.5 font-heading text-sm font-semibold text-secondary transition-all duration-200 hover:bg-secondary/5 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2 disabled:opacity-50"
-                      >
-                        <ArrowPathIcon className="h-4 w-4" aria-hidden="true" />
-                        {closureLoading ? 'Processing...' : 'Partial Closure'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleCompleteClosure('final')}
-                        disabled={closureLoading}
-                        className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-error bg-white px-4 py-2.5 font-heading text-sm font-semibold text-error transition-all duration-200 hover:bg-error/5 focus:outline-none focus:ring-2 focus:ring-error focus:ring-offset-2 disabled:opacity-50"
-                      >
-                        <ArchiveBoxIcon className="h-4 w-4" aria-hidden="true" />
-                        {closureLoading ? 'Processing...' : 'Final Closure'}
-                      </button>
-                    </div>
-                    <p className="mt-2 text-xs text-text-muted">
-                      Partial: opens a new period for more expenses. Final: permanently closes the group.
-                    </p>
-                  </div>
+              <div className="mt-2 text-xs">
+                {payments.length === 0 && (
+                  <p className="text-text-muted">No payments recorded yet.</p>
                 )}
-                {!readyForClosure && (
-                  <div>
-                    {payments.length === 0 && (
-                      <p className="text-sm text-text-muted">
-                        No payments recorded yet. Record payments below to begin settlement.
-                      </p>
-                    )}
-                    {pendingPayments.length > 0 && (
-                      <p className="text-sm text-warning">
-                        {pendingPayments.length} payment{pendingPayments.length !== 1 ? 's' : ''} waiting for creditor acceptance.
-                      </p>
-                    )}
-                    {pendingPayments.length === 0 && !allBalancesZero && (
-                      <p className="text-sm text-error">
-                        Balances not settled. Record more payments to zero out all balances.
-                      </p>
-                    )}
-                    {pendingPayments.length === 0 && allBalancesZero && acceptedPayments.length === 0 && (
-                      <p className="text-sm text-text-muted">
-                        No payments needed — balances are already settled.
-                      </p>
-                    )}
-                  </div>
+                {pendingPayments.length > 0 && (
+                  <p className="text-warning">
+                    {pendingPayments.length} payment{pendingPayments.length !== 1 ? 's' : ''} waiting for acceptance.
+                  </p>
                 )}
+                {pendingPayments.length === 0 && !allBalancesZero && (
+                  <p className="text-error">Balances not settled. Record more payments.</p>
+                )}
+                {pendingPayments.length === 0 && allBalancesZero && acceptedPayments.length === 0 && (
+                  <p className="text-text-muted">No payments needed — balances are settled.</p>
+                )}
+              </div>
+            )}
+
+            {/* Closure error */}
+            {closureError && (
+              <div className="mt-2 rounded-lg border border-error/30 bg-error/5 px-3 py-2 text-xs text-error" role="alert">
+                {closureError}
               </div>
             )}
           </div>
         )}
 
+        {/* ---- Payments section (elevated during CLOSING) ---- */}
+        {group.balanceMode === 'STATIC' && currentPeriod?.status === 'CLOSING' && renderPayments('mt-12 mb-12')}
+
         {/* ---- Members section ---- */}
-        <section>
+        <section className="mb-4">
           <h2 className="font-heading text-xl font-bold text-primary">Members</h2>
 
           {members.length === 0 ? (
@@ -794,7 +965,7 @@ export default function GroupDetailPage() {
         </section>
 
         {/* ---- Balances section ---- */}
-        <section className="mt-12">
+        <section className="mb-4">
           <h2 className="font-heading text-xl font-bold text-primary">Balances</h2>
 
           {balances.length === 0 ? (
@@ -874,7 +1045,7 @@ export default function GroupDetailPage() {
         </section>
 
         {/* ---- Expenses section ---- */}
-        <section className="mt-12">
+        <section>
           <div className="flex items-center justify-between">
             <h2 className="font-heading text-xl font-bold text-primary">Expenses</h2>
             <button
@@ -1174,137 +1345,7 @@ export default function GroupDetailPage() {
           )}
         </section>
 
-        {/* ---- Payments section ---- */}
-        <section className="mt-12 mb-12">
-          <div className="flex items-center justify-between">
-            <h2 className="font-heading text-xl font-bold text-primary">Payments</h2>
-            {/* Show Record button for DYNAMIC groups, or STATIC groups during CLOSING */}
-            {(group.balanceMode !== 'STATIC' || currentPeriod?.status === 'CLOSING') && (
-              <button
-                type="button"
-                onClick={() => setShowPaymentForm(true)}
-                className="inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium text-cta transition-colors duration-200 hover:text-cta/80 focus:outline-none focus:ring-2 focus:ring-cta/30 rounded-lg px-2 py-1"
-              >
-                <PlusIcon className="h-4 w-4" aria-hidden="true" />
-                Record
-              </button>
-            )}
-          </div>
-
-          {group.balanceMode === 'STATIC' && currentPeriod?.status !== 'CLOSING' && payments.length === 0 && (
-            <div className="mt-4 rounded-xl border border-border bg-white px-5 py-6 text-center">
-              <CreditCardIcon className="mx-auto h-8 w-8 text-text-muted/40" aria-hidden="true" />
-              <p className="mt-2 text-sm text-text-muted">
-                {currentPeriod?.status === 'OPEN' && 'Payments can only be recorded during a closure period.'}
-                {currentPeriod?.status === 'CLOSED' && 'No payments in this closed period.'}
-                {currentPeriod?.status === 'FINAL' && 'Group is permanently closed.'}
-              </p>
-            </div>
-          )}
-
-          {payments.length > 0 && (<>
-            <div className="mt-4 rounded-xl border border-border bg-white">
-              <ul className="divide-y divide-border">
-                {payments.map((payment) => {
-                  const isSender = payment.fromUserId === currentUserId;
-                  const isReceiver = payment.toUserId === currentUserId;
-                  const isGroupOwner = group.ownerId === currentUserId;
-                  const canDeletePayment = isSender || isGroupOwner;
-                  const isPending = payment.status === 'PENDING';
-                  const isAccepted = payment.status === 'ACCEPTED';
-                  const isRejected = payment.status === 'REJECTED';
-
-                  return (
-                  <li
-                    key={payment.id}
-                    className="flex items-center justify-between px-5 py-4 first:rounded-t-xl last:rounded-b-xl"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-cta/10">
-                        <ArrowPathIcon className="h-4 w-4 text-cta" aria-hidden="true" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm text-text">
-                          <span className="font-semibold">
-                            {payment.fromUser?.nickName || payment.fromUser?.email || 'Unknown'}
-                          </span>
-                          {' → '}
-                          <span className="font-semibold">
-                            {payment.toUser?.nickName || payment.toUser?.email || 'Unknown'}
-                          </span>
-                        </p>
-                        <p className="text-xs text-text-muted">
-                          {formatDate(payment.paidAt)}
-                          {payment.method ? ` · ${payment.method}` : ''}
-                          {isClosing && (
-                            <span className="ml-2">
-                              {isPending && <span className="text-warning">· Pending</span>}
-                              {isAccepted && <span className="text-success">· Accepted</span>}
-                              {isRejected && <span className="text-error">· Rejected</span>}
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex flex-shrink-0 items-center gap-2">
-                      <span className="font-heading text-sm font-bold text-cta">
-                        {formatCurrency(payment.amount, currency)}
-                      </span>
-                      {/* Accept/Reject buttons during CLOSING (receiver only) */}
-                      {isClosing && isReceiver && isPending && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleAcceptPayment(payment.id)}
-                            className="cursor-pointer rounded p-1 text-success transition-colors duration-200 hover:bg-success/10 focus:outline-none focus:ring-2 focus:ring-success/30"
-                            aria-label="Accept payment"
-                          >
-                            <CheckCircleIcon className="h-4 w-4" aria-hidden="true" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setRejectingPaymentId(payment.id);
-                              setRejectReason('');
-                            }}
-                            className="cursor-pointer rounded p-1 text-error transition-colors duration-200 hover:bg-error/10 focus:outline-none focus:ring-2 focus:ring-error/30"
-                            aria-label="Reject payment"
-                          >
-                            <XMarkIcon className="h-4 w-4" aria-hidden="true" />
-                          </button>
-                        </>
-                      )}
-                      {canDeletePayment && !isClosing && (
-                        <button
-                          type="button"
-                          onClick={() => setDeletingPaymentId(payment.id)}
-                          className="cursor-pointer rounded p-1 text-text-muted transition-colors duration-200 hover:bg-error/10 hover:text-error focus:outline-none focus:ring-2 focus:ring-error/30"
-                          aria-label="Delete payment"
-                        >
-                          <TrashIcon className="h-4 w-4" aria-hidden="true" />
-                        </button>
-                      )}
-                    </div>
-                  </li>
-                  );
-                })}
-              </ul>
-            </div>
-            {hasMorePayments && (
-              <div className="mt-4 text-center">
-                <button
-                  type="button"
-                  onClick={handleLoadMorePayments}
-                  disabled={paymentsLoading}
-                  className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-white px-5 py-2.5 text-sm font-semibold text-cta transition-all duration-200 hover:bg-cta/5 focus:outline-none focus:ring-2 focus:ring-cta/30 disabled:opacity-50"
-                >
-                  {paymentsLoading ? 'Loading...' : 'Load more payments'}
-                </button>
-              </div>
-            )}
-            </>
-          )}
-        </section>
+        {group.balanceMode !== 'STATIC' && renderPayments('mt-12 mb-12')}
       </div>
 
       {/* ---- Modals ---- */}
@@ -1399,6 +1440,21 @@ export default function GroupDetailPage() {
           variant="danger"
           onConfirm={handleDeletePayment}
           onClose={() => setDeletingPaymentId(null)}
+        />
+      )}
+
+      {/* Start Closure confirmation */}
+      {showStartClosureConfirm && (
+        <ConfirmDialog
+          title="Start Closure"
+          message="Freeze expenses and begin the settlement period. Members will need to record payments to settle their debts before closure completes."
+          confirmLabel="Start Closure"
+          variant="warning"
+          onConfirm={async () => {
+            await handleStartClosure();
+            setShowStartClosureConfirm(false);
+          }}
+          onClose={() => setShowStartClosureConfirm(false)}
         />
       )}
 
