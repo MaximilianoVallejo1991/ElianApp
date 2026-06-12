@@ -21,8 +21,8 @@ export default function GroupsPage() {
   // Create-group modal state
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newCurrency, setNewCurrency] = useState('USD');
-  const [newBalanceMode, setNewBalanceMode] = useState('DYNAMIC');
+  const [newCurrency, setNewCurrency] = useState('ARS');
+  const [newBalanceMode, setNewBalanceMode] = useState('STATIC');
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState('');
 
@@ -62,8 +62,8 @@ export default function GroupsPage() {
       setGroups((prev) => [...prev, response.data]);
       setShowCreate(false);
       setNewName('');
-      setNewCurrency('USD');
-      setNewBalanceMode('DYNAMIC');
+      setNewCurrency('ARS');
+      setNewBalanceMode('STATIC');
       navigate(`/groups/${response.data.id}`);
     } catch (err) {
       setCreateError(err.message || 'Failed to create group.');
@@ -78,11 +78,12 @@ export default function GroupsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
+    <div className="flex min-h-screen flex-col bg-background">
+      <div className="mx-auto w-full max-w-4xl flex-1 px-4 py-12 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-12 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-text-muted">ElianApp</p>
             <h1
               className="font-heading text-[clamp(2rem,6vw,3.5rem)] font-black leading-none tracking-[-0.05em] text-primary"
             >
@@ -202,7 +203,14 @@ export default function GroupsPage() {
             ))}
           </div>
         )}
-      </div>
+        </div>
+
+        {/* Footer */}
+        <footer className="pb-6 text-center">
+          <p className="text-xs text-text-muted">
+            &copy; {new Date().getFullYear()} SalvathorProyects. All rights reserved.
+          </p>
+        </footer>
 
       {/* Create Group Modal */}
       {showCreate && (
