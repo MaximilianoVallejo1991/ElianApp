@@ -19,7 +19,7 @@ import { sendPasswordResetEmail } from '../lib/email.js';
 export const COOKIE_BASE = {
   httpOnly: true,
   secure: true,
-  sameSite: 'lax',
+  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
 };
 
 /** Full options used when setting the JWT cookie. */
