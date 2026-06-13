@@ -9,6 +9,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
 import { authService } from '../services/api';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 export default function ResetPasswordPage() {
   const { user } = useAuth();
@@ -84,6 +85,11 @@ export default function ResetPasswordPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-md space-y-10">
+        {/* Language switcher */}
+        <div className="flex justify-end">
+          <LanguageSwitcher />
+        </div>
+
         {/* Header */}
         <div className="text-center">
           <h1 className="font-heading text-[clamp(2.5rem,8vw,4.5rem)] font-black leading-none tracking-[-0.05em] text-primary">

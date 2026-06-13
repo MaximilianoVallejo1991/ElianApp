@@ -4,6 +4,7 @@ import { EnvelopeIcon, UserIcon, LockClosedIcon, UserGroupIcon } from '@heroicon
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
 import { inviteService } from '../services/api';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 export default function RegisterPage() {
   const { register, user } = useAuth();
@@ -102,6 +103,11 @@ export default function RegisterPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-md space-y-10">
+        {/* Language switcher */}
+        <div className="flex justify-end">
+          <LanguageSwitcher />
+        </div>
+
         {/* Header */}
         <div className="text-center">
           <h1

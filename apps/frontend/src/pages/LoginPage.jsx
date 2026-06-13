@@ -4,6 +4,7 @@ import { EnvelopeIcon, LockClosedIcon, UserGroupIcon } from '@heroicons/react/24
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
 import { inviteService } from '../services/api';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 export default function LoginPage() {
   const { login, user } = useAuth();
@@ -85,6 +86,11 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-md space-y-10">
+        {/* Language switcher */}
+        <div className="flex justify-end">
+          <LanguageSwitcher />
+        </div>
+
         {/* Header */}
         <div className="text-center">
           <h1
@@ -93,7 +99,7 @@ export default function LoginPage() {
             ElianApp
           </h1>
           <p className="mt-3 text-lg text-text-muted">
-            Welcome back. Sign in to your account.
+            {t('auth.signInDescription')}
           </p>
         </div>
 
@@ -202,7 +208,7 @@ export default function LoginPage() {
             to={inviteToken ? `/register?invite=${inviteToken}` : '/register'}
             className="font-semibold text-secondary underline-offset-2 transition-colors duration-200 hover:text-secondary/80 hover:underline"
           >
-            Create one
+            {t('auth.createOne')}
           </Link>
         </p>
 
@@ -212,7 +218,7 @@ export default function LoginPage() {
             to="/forgot-password"
             className="font-semibold text-secondary underline-offset-2 transition-colors duration-200 hover:text-secondary/80 hover:underline"
           >
-            Reset it
+            {t('auth.forgotLink')}
           </Link>
         </p>
       </div>

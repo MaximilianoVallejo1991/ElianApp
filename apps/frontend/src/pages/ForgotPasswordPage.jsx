@@ -4,6 +4,7 @@ import { EnvelopeIcon, ArrowLeftIcon, CheckCircleIcon } from '@heroicons/react/2
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
 import { authService } from '../services/api';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 export default function ForgotPasswordPage() {
   const { user } = useAuth();
@@ -49,6 +50,11 @@ export default function ForgotPasswordPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-md space-y-10">
+        {/* Language switcher */}
+        <div className="flex justify-end">
+          <LanguageSwitcher />
+        </div>
+
         {/* Header */}
         <div className="text-center">
           <h1
