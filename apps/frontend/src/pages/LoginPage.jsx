@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, Navigate, useSearchParams } from 'react-router-dom';
 import { EnvelopeIcon, LockClosedIcon, UserGroupIcon } from '@heroicons/react/24/outline';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
 import { inviteService } from '../services/api';
 
 export default function LoginPage() {
   const { login, user } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
 
   const inviteToken = searchParams.get('invite');
@@ -132,7 +134,7 @@ export default function LoginPage() {
           {/* Email */}
           <div>
             <label htmlFor="login-email" className="mb-1.5 block text-sm font-semibold text-text">
-              Email
+              {t('auth.email')}
             </label>
             <div className="relative">
               <EnvelopeIcon
@@ -155,7 +157,7 @@ export default function LoginPage() {
           {/* Password */}
           <div>
             <label htmlFor="login-password" className="mb-1.5 block text-sm font-semibold text-text">
-              Password
+              {t('auth.password')}
             </label>
             <div className="relative">
               <LockClosedIcon
@@ -188,14 +190,14 @@ export default function LoginPage() {
                 Signing in…
               </>
             ) : (
-              'Sign in'
+              t('auth.signIn')
             )}
           </button>
         </form>
 
         {/* Footer */}
         <p className="text-center text-sm text-text-muted">
-          Don&apos;t have an account?{' '}
+          {t('auth.noAccount')}{' '}
           <Link
             to={inviteToken ? `/register?invite=${inviteToken}` : '/register'}
             className="font-semibold text-secondary underline-offset-2 transition-colors duration-200 hover:text-secondary/80 hover:underline"
@@ -205,7 +207,7 @@ export default function LoginPage() {
         </p>
 
         <p className="text-center text-sm text-text-muted">
-          Forgot your password?{' '}
+          {t('auth.forgotPassword')}{' '}
           <Link
             to="/forgot-password"
             className="font-semibold text-secondary underline-offset-2 transition-colors duration-200 hover:text-secondary/80 hover:underline"

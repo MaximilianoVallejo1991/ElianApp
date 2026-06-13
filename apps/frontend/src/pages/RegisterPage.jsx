@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, Navigate, useSearchParams } from 'react-router-dom';
 import { EnvelopeIcon, UserIcon, LockClosedIcon, UserGroupIcon } from '@heroicons/react/24/outline';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
 import { inviteService } from '../services/api';
 
 export default function RegisterPage() {
   const { register, user } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
 
   const inviteToken = searchParams.get('invite');
@@ -169,7 +171,7 @@ export default function RegisterPage() {
           {/* Email */}
           <div>
             <label htmlFor="register-email" className="mb-1.5 block text-sm font-semibold text-text">
-              Email
+              {t('auth.email')}
             </label>
             <div className="relative">
               <EnvelopeIcon
@@ -192,7 +194,7 @@ export default function RegisterPage() {
           {/* Display Name */}
           <div>
             <label htmlFor="register-nickname" className="mb-1.5 block text-sm font-semibold text-text">
-              Display name
+              {t('auth.nickname')}
             </label>
             <div className="relative">
               <UserIcon
@@ -216,7 +218,7 @@ export default function RegisterPage() {
           {/* Password */}
           <div>
             <label htmlFor="register-password" className="mb-1.5 block text-sm font-semibold text-text">
-              Password
+              {t('auth.password')}
             </label>
             <div className="relative">
               <LockClosedIcon
@@ -246,17 +248,17 @@ export default function RegisterPage() {
             {loading ? (
               <>
                 <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                Creating account…
+                {t('auth.register')}…
               </>
             ) : (
-              'Create account'
+              t('auth.register')
             )}
           </button>
         </form>
 
         {/* Footer */}
         <p className="text-center text-sm text-text-muted">
-          Already have an account?{' '}
+          {t('auth.haveAccount')}{' '}
           <Link
             to={inviteToken ? `/login?invite=${inviteToken}` : '/login'}
             className="font-semibold text-secondary underline-offset-2 transition-colors duration-200 hover:text-secondary/80 hover:underline"

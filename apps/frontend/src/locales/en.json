@@ -5,9 +5,11 @@
   },
   "nav": {
     "myGroups": "My Groups",
-    "signOut": "Sign out"
+    "signOut": "Sign out",
+    "backToGroups": "Back to groups"
   },
   "group": {
+    "title": "Group",
     "members": "Members",
     "balances": "Balances",
     "expenses": "Expenses",
@@ -37,6 +39,15 @@
     "noGroups": "No groups yet",
     "createGroupDescription": "Create a group to start tracking shared expenses.",
     "signedInAs": "Signed in as",
+    "spent": "spent",
+    "groupName": "Group name",
+    "groupNamePlaceholder": "Trip to Cancun",
+    "currency": "Currency",
+    "balanceMode": "Balance mode",
+    "dynamic": "Dynamic",
+    "dynamicDescription": "Balances update continuously. Good for casual groups and friends.",
+    "static": "Static",
+    "staticDescription": "Settlement periods with freeze and payment acceptance. Good for roommates and formal arrangements.",
     "members_one": "{{count}} member",
     "members_other": "{{count}} members"
   },
@@ -45,12 +56,26 @@
     "add": "Add expense",
     "edit": "Edit",
     "delete": "Delete",
+    "deleteConfirm": "Are you sure you want to delete this expense?",
     "amount": "Amount",
     "description": "Description",
     "category": "Category",
     "paidBy": "paid by",
     "splitType": "Split type",
-    "collective": "Collective",
+    "equal": "Equal",
+    "percentage": "Percentages",
+    "exact": "Exact",
+    "collective": "Exact",
+    "splitByEqual": "Split equally",
+    "splitByPercentage": "Split by percentage",
+    "date": "Date",
+    "categories": {
+      "FOOD": "Food",
+      "TRANSPORT": "Transport",
+      "HOUSING": "Housing",
+      "ENTERTAINMENT": "Entertainment",
+      "OTHER": "Other"
+    },
     "selectParticipants": "Select participants",
     "noExpenses": "No expenses yet.",
     "reportItem": "Report item",
@@ -58,9 +83,15 @@
     "deleteItem": "Delete",
     "yourItem": "Your item",
     "editItem": "Edit your item",
+    "saving": "Saving…",
+    "deleting": "Deleting…",
     "mismatch": "Mismatch",
+    "mismatchWithAmount": "Mismatch ({{amount}})",
     "pending": "Pending",
-    "completed": "Completed"
+    "completed": "Completed",
+    "locked": "Locked",
+    "loadMore": "Load more expenses",
+    "untitled": "Untitled expense"
   },
   "payment": {
     "title": "Payments",
@@ -68,12 +99,20 @@
     "paidTo": "Paid to",
     "amount": "Amount",
     "method": "Method",
+    "description": "Record a payment you made to another group member. Balances will update automatically.",
+    "noDebtsDescription": "You don't currently owe anyone. Payments can still be recorded, but they may not be needed.",
     "accept": "Accept",
     "reject": "Reject",
     "delete": "Delete",
+    "deleteConfirm": "Are you sure you want to delete this payment? Balances will be recalculated.",
     "pending": "Pending",
     "accepted": "Accepted",
-    "rejected": "Rejected"
+    "rejected": "Rejected",
+    "loadMore": "Load more payments",
+    "noPaymentsNeeded": "No payments needed — balances are already settled.",
+    "paymentsWaiting": "{{count}} payment waiting for acceptance.",
+    "paymentsWaiting_other": "{{count}} payments waiting for acceptance.",
+    "balancesNotSettled": "Balances not settled. Record more payments."
   },
   "balance": {
     "title": "Balances",
@@ -81,7 +120,8 @@
     "isOwed": "is owed",
     "settled": "Settled",
     "youOwe": "You owe",
-    "youAreOwed": "You are owed"
+    "youAreOwed": "You are owed",
+    "everyoneSettled": "Everyone is settled up."
   },
   "member": {
     "title": "Members",
@@ -91,14 +131,22 @@
     "unfreeze": "Unfreeze",
     "remove": "Remove",
     "leave": "Leave group",
-    "invite": "Invite"
+    "invite": "Invite",
+    "leaveConfirm": "Are you sure you want to leave this group? You will no longer see it in your groups list.",
+    "removeConfirm": "Are you sure you want to remove this member?",
+    "removeDescription": "Removing a member does not delete their historical expenses or payments."
   },
   "settlement": {
     "period": "Settlement Period",
+    "statusOPEN": "Open",
+    "statusCLOSING": "Closing",
+    "statusCLOSED": "Closed",
+    "statusFINAL": "Final",
     "open": "Open — expenses can be added and edited",
     "closing": "Closing — recording payments, awaiting acceptance",
     "closed": "Closed period — no further changes",
-    "final": "Final — group is permanently closed"
+    "final": "Final — group is permanently closed",
+    "startConfirm": "Freeze expenses and begin the settlement period. Members will need to record payments to settle their debts before closure completes."
   },
   "auth": {
     "signIn": "Sign in",
@@ -110,9 +158,29 @@
     "forgotPassword": "Forgot password?",
     "resetPassword": "Reset password",
     "sendResetLink": "Send reset link",
+    "sendResetLinkSuccess": "Check your email. If an account with that email exists, you will receive a reset link.",
     "newPassword": "New password",
     "confirmPassword": "Confirm password",
-    "rememberPassword": "Remember your password?"
+    "resetSuccess": "Your password has been reset successfully. You can now sign in with your new password.",
+    "invalidResetLink": "This reset link is invalid. Please request a new one.",
+    "rememberPassword": "Remember your password?",
+    "noAccount": "Don't have an account?",
+    "haveAccount": "Already have an account?",
+    "registerWithInvite": "You have been invited to join a group. Create your account to accept.",
+    "checkEmail": "Check your email"
+  },
+  "form": {
+    "amount": "Amount",
+    "description": "Description",
+    "method": "Method",
+    "methodOptional": "Method (optional)",
+    "paidTo": "Paid to",
+    "selectMember": "Select a member…",
+    "noMembersAvailable": "No other members in this group.",
+    "cash": "Cash",
+    "bankTransfer": "Bank transfer",
+    "itemAmount": "Your amount",
+    "itemDescription": "Item description"
   },
   "common": {
     "save": "Save",
@@ -128,9 +196,16 @@
     "search": "Search",
     "noResults": "No results",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "unknown": "Unknown",
+    "you": "you",
+    "notFound": "Not found"
   },
   "footer": {
     "rights": "© {{year}} SalvathorProyects. All rights reserved."
+  },
+  "language": {
+    "es": "Spanish",
+    "en": "English"
   }
 }

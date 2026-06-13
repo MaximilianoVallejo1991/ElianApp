@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { EnvelopeIcon, ArrowLeftIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
 import { authService } from '../services/api';
 
 export default function ForgotPasswordPage() {
   const { user } = useAuth();
+  const { t } = useTranslation();
 
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
@@ -65,18 +67,17 @@ export default function ForgotPasswordPage() {
               <CheckCircleIcon className="h-12 w-12 text-success" aria-hidden="true" />
             </div>
             <h2 className="font-heading text-xl font-bold text-primary">
-              Check your email
+              {t('auth.checkEmail')}
             </h2>
             <p className="mt-3 text-sm text-text-muted">
-              If an account with that email exists, we have sent a password reset link.
-              Please check your inbox (and spam folder).
+              {t('auth.sendResetLinkSuccess')}
             </p>
             <Link
               to="/login"
               className="mt-6 inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3 font-heading text-sm font-semibold text-white transition-all duration-200 hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
             >
               <ArrowLeftIcon className="h-4 w-4" aria-hidden="true" />
-              Back to sign in
+              {t('common.back')} {t('auth.signIn')}
             </Link>
           </div>
         ) : (
@@ -100,7 +101,7 @@ export default function ForgotPasswordPage() {
                 {/* Email */}
                 <div>
                   <label htmlFor="fp-email" className="mb-1.5 block text-sm font-semibold text-text">
-                    Email
+                    {t('auth.email')}
                   </label>
                   <div className="relative">
                     <EnvelopeIcon
@@ -133,7 +134,7 @@ export default function ForgotPasswordPage() {
                       Sending…
                     </>
                   ) : (
-                    'Send reset link'
+                    t('auth.sendResetLink')
                   )}
                 </button>
               </form>
@@ -141,7 +142,7 @@ export default function ForgotPasswordPage() {
 
             {/* Back to sign in */}
             <p className="text-center text-sm text-text-muted">
-              Remember your password?{' '}
+              {t('auth.rememberPassword')}{' '}
               <Link
                 to="/login"
                 className="font-semibold text-secondary underline-offset-2 transition-colors duration-200 hover:text-secondary/80 hover:underline"

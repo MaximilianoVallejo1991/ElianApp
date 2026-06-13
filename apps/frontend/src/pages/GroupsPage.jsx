@@ -86,7 +86,10 @@ export default function GroupsPage() {
         {/* Header */}
         <div className="mb-12 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-text-muted">ElianApp</p>
+            <div className="flex items-center gap-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-text-muted">ElianApp</p>
+              <LanguageSwitcher />
+            </div>
             <h1
               className="font-heading text-[clamp(2rem,6vw,3.5rem)] font-black leading-none tracking-[-0.05em] text-primary"
             >
@@ -100,7 +103,6 @@ export default function GroupsPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <LanguageSwitcher />
             <button
               type="button"
               onClick={() => setShowCreate(true)}
@@ -245,7 +247,7 @@ export default function GroupsPage() {
 
               <div>
                 <label htmlFor="group-name" className="mb-1.5 block text-sm font-semibold text-text">
-                  Group name
+                  {t('group.groupName')}
                 </label>
                 <input
                   id="group-name"
@@ -254,14 +256,14 @@ export default function GroupsPage() {
                   autoFocus
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Trip to Cancun"
+                  placeholder={t('group.groupNamePlaceholder')}
                   className="w-full rounded-lg border border-border bg-white px-4 py-3 text-text transition-colors duration-200 placeholder:text-text-muted/50 focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary/20"
                 />
               </div>
 
               <div>
                 <label htmlFor="group-currency" className="mb-1.5 block text-sm font-semibold text-text">
-                  Currency
+                  {t('group.currency')}
                 </label>
                 <select
                   id="group-currency"
@@ -281,7 +283,7 @@ export default function GroupsPage() {
 
               <div>
                 <label className="mb-2 block text-sm font-semibold text-text">
-                  Balance mode
+                  {t('group.balanceMode')}
                 </label>
                 <div className="space-y-2">
                   <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3 transition-colors duration-200 hover:bg-border/20 has-[:checked]:border-secondary has-[:checked]:bg-secondary/5">
@@ -294,9 +296,9 @@ export default function GroupsPage() {
                       className="mt-1 h-4 w-4 text-secondary focus:ring-secondary"
                     />
                     <div>
-                      <span className="text-sm font-medium text-text">Dynamic</span>
+                      <span className="text-sm font-medium text-text">{t('group.dynamic')}</span>
                       <p className="text-xs text-text-muted">
-                        Balances update continuously. Good for casual groups and friends.
+                        {t('group.dynamicDescription')}
                       </p>
                     </div>
                   </label>
@@ -310,9 +312,9 @@ export default function GroupsPage() {
                       className="mt-1 h-4 w-4 text-secondary focus:ring-secondary"
                     />
                     <div>
-                      <span className="text-sm font-medium text-text">Static</span>
+                      <span className="text-sm font-medium text-text">{t('group.static')}</span>
                       <p className="text-xs text-text-muted">
-                        Settlement periods with freeze and payment acceptance. Good for roommates and formal arrangements.
+                        {t('group.staticDescription')}
                       </p>
                     </div>
                   </label>
@@ -328,7 +330,7 @@ export default function GroupsPage() {
                   }}
                   className="flex-1 cursor-pointer rounded-lg border border-border px-4 py-3 text-sm font-medium text-text-muted transition-colors duration-200 hover:bg-border/30 focus:outline-none focus:ring-2 focus:ring-secondary/30"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"

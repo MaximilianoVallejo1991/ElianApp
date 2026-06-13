@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   ArrowLeftIcon,
   UserGroupIcon,
@@ -44,8 +45,8 @@ import MemberManagementPanel from '../components/MemberManagementPanel';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 
 const BALANCE_MODE_LABELS = {
-  DYNAMIC: 'Dynamic',
-  STATIC: 'Static',
+  DYNAMIC: 'group.dynamic',
+  STATIC: 'group.static',
 };
 
 const CATEGORY_STYLES = {
@@ -82,6 +83,7 @@ export default function GroupDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
+  const { t } = useTranslation();
 
   const [group, setGroup] = useState(null);
   const [balances, setBalances] = useState([]);
@@ -415,7 +417,7 @@ export default function GroupDetailPage() {
           className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-secondary transition-colors duration-200 hover:text-secondary/80 hover:underline"
         >
           <ArrowLeftIcon className="h-4 w-4" aria-hidden="true" />
-          Back to groups
+          {t('nav.backToGroups')}
         </Link>
       </div>
     );
@@ -471,7 +473,7 @@ export default function GroupDetailPage() {
       return (
         <span className="inline-flex items-center gap-1 rounded-full bg-cta/10 px-2.5 py-0.5 text-xs font-semibold text-cta">
           <ClockIcon className="h-3 w-3" aria-hidden="true" />
-          Pending
+          {t('expense.pending')}
         </span>
       );
     }
@@ -487,7 +489,7 @@ export default function GroupDetailPage() {
       return (
         <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-error/10 px-2.5 py-0.5 text-xs font-semibold text-error">
           <ExclamationTriangleIcon className="h-3 w-3" aria-hidden="true" />
-          Mismatch ({formatCurrency(discrepancy, currency)})
+          {t('expense.mismatchWithAmount', { amount: formatCurrency(discrepancy, currency) })}
         </span>
       );
     }
@@ -496,7 +498,7 @@ export default function GroupDetailPage() {
       return (
         <span className="inline-flex items-center gap-1 rounded-full bg-secondary/10 px-2.5 py-0.5 text-xs font-semibold text-secondary">
           <CheckCircleIcon className="h-3 w-3" aria-hidden="true" />
-          Match
+          {t('expense.completed')}
         </span>
       );
     }
@@ -505,7 +507,7 @@ export default function GroupDetailPage() {
       return (
         <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2.5 py-0.5 text-xs font-semibold text-success">
           <CheckCircleIcon className="h-3 w-3" aria-hidden="true" />
-          Completed
+          {t('expense.completed')}
         </span>
       );
     }
@@ -524,7 +526,7 @@ export default function GroupDetailPage() {
   const renderPayments = (sectionClasses) => (
     <section className={sectionClasses}>
       <div className="flex items-center justify-between">
-        <h2 className="font-heading text-xl font-bold text-primary">Payments</h2>
+        <h2 className="font-heading text-xl font-bold text-primary">{t('group.payments')}</h2>
         {(group.balanceMode !== 'STATIC' || currentPeriod?.status === 'CLOSING') && (
           <button
             type="button"
@@ -532,7 +534,7 @@ export default function GroupDetailPage() {
             className="inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium text-cta transition-colors duration-200 hover:text-cta/80 focus:outline-none focus:ring-2 focus:ring-cta/30 rounded-lg px-2 py-1"
           >
             <PlusIcon className="h-4 w-4" aria-hidden="true" />
-            Record
+            {t('payment.record')}
           </button>
         )}
       </div>
@@ -542,12 +544,12 @@ export default function GroupDetailPage() {
           <ArrowPathIcon className="mx-auto h-8 w-8 text-text-muted/40" aria-hidden="true" />
           <p className="mt-2 text-sm text-text-muted">
             {group.balanceMode === 'STATIC' && currentPeriod?.status !== 'CLOSING' && (
-              currentPeriod?.status === 'OPEN' ? 'Payments can only be recorded during a closure period.'
-              : currentPeriod?.status === 'CLOSED' ? 'No payments in this closed period.'
-              : 'Group is permanently closed.'
+              currentPeriod?.status === 'OPEN' ? t('group.noPaymentsOpen')
+              : currentPeriod?.status === 'CLOSED' ? t('group.noPaymentsClosed')
+              : t('group.noPaymentsFinal')
             )}
             {(group.balanceMode !== 'STATIC' || currentPeriod?.status === 'CLOSING') && (
-              'No payments recorded yet. Click "Record" to add the first payment.'
+              t('group.noPaymentsClosing')
             )}
           </p>
         </div>
@@ -589,9 +591,9 @@ export default function GroupDetailPage() {
                       {payment.method ? ` · ${payment.method}` : ''}
                       {isClosing && (
                         <span className="ml-2">
-                          {isPending && <span className="text-warning">· Pending</span>}
-                          {isAccepted && <span className="text-success">· Accepted</span>}
-                          {isRejected && <span className="text-error">· Rejected</span>}
+                          {isPending && <span className="text-warning">· {t('payment.pending')}</span>}
+                          {isAccepted && <span className="text-success">· {t('payment.accepted')}</span>}
+                          {isRejected && <span className="text-error">· {t('payment.rejected')}</span>}
                         </span>
                       )}
                     </p>
@@ -648,7 +650,7 @@ export default function GroupDetailPage() {
               disabled={paymentsLoading}
               className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-white px-5 py-2.5 text-sm font-semibold text-cta transition-all duration-200 hover:bg-cta/5 focus:outline-none focus:ring-2 focus:ring-cta/30 disabled:opacity-50"
             >
-              {paymentsLoading ? 'Loading...' : 'Load more payments'}
+              {paymentsLoading ? t('common.loading') : t('payment.loadMore')}
             </button>
           </div>
         )}
@@ -660,15 +662,18 @@ export default function GroupDetailPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
-        {/* Back link */}
-        <button
-          type="button"
-          onClick={() => navigate('/groups')}
-          className="mb-8 inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-text-muted transition-colors duration-200 hover:text-primary focus:outline-none focus:ring-2 focus:ring-secondary/30 rounded-lg px-2 py-1 -ml-2"
-        >
-          <ArrowLeftIcon className="h-4 w-4" aria-hidden="true" />
-          Back to groups
-        </button>
+        {/* Top bar: back link + language switcher */}
+        <div className="mb-8 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => navigate('/groups')}
+            className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-text-muted transition-colors duration-200 hover:text-primary focus:outline-none focus:ring-2 focus:ring-secondary/30 rounded-lg px-2 py-1 -ml-2"
+          >
+            <ArrowLeftIcon className="h-4 w-4" aria-hidden="true" />
+            {t('nav.backToGroups')}
+          </button>
+          <LanguageSwitcher />
+        </div>
 
         {/* Group header */}
         <div className="mb-10">
@@ -686,19 +691,18 @@ export default function GroupDetailPage() {
 
                 <span className="inline-flex items-center gap-1.5 rounded-lg bg-secondary/5 px-3 py-1.5 text-sm font-medium text-secondary">
                   <ClockIcon className="h-4 w-4" aria-hidden="true" />
-                  {BALANCE_MODE_LABELS[group.balanceMode] || group.balanceMode || 'Dynamic'}
+                  {t(BALANCE_MODE_LABELS[group.balanceMode] || 'group.dynamic')}
                 </span>
 
                 <span className="inline-flex items-center gap-1.5 rounded-lg bg-secondary/5 px-3 py-1.5 text-sm font-medium text-secondary">
                   <UserGroupIcon className="h-4 w-4" aria-hidden="true" />
-                  {members.length} member{members.length !== 1 ? 's' : ''}
+                  {t('group.members', { count: members.length })}
                 </span>
               </div>
             </div>
 
             {/* Action buttons */}
             <div className="flex flex-shrink-0 flex-col gap-2 sm:items-end">
-              <LanguageSwitcher />
               {/* Hide Add expense during CLOSING for STATIC groups */}
               {(group.balanceMode !== 'STATIC' || currentPeriod?.status !== 'CLOSING') && (
                 <button
@@ -707,7 +711,7 @@ export default function GroupDetailPage() {
                   className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3 font-heading text-sm font-semibold text-white transition-all duration-200 hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 sm:w-auto"
                 >
                   <PlusIcon className="h-5 w-5" aria-hidden="true" />
-                  Add expense
+                  {t('group.addExpense')}
                 </button>
               )}
               {/* Show Record payment for DYNAMIC groups, or STATIC groups during CLOSING */}
@@ -718,7 +722,7 @@ export default function GroupDetailPage() {
                   className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-cta bg-white px-5 py-3 font-heading text-sm font-semibold text-cta transition-all duration-200 hover:bg-cta/5 focus:outline-none focus:ring-2 focus:ring-cta focus:ring-offset-2 sm:w-auto"
                 >
                   <ArrowPathIcon className="h-5 w-5" aria-hidden="true" />
-                  Record payment
+                  {t('group.recordPayment')}
                 </button>
               )}
               {group.ownerId === currentUserId && (
@@ -731,7 +735,7 @@ export default function GroupDetailPage() {
                       className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-border bg-white px-4 py-3 font-heading text-sm font-semibold text-text-muted transition-all duration-200 hover:bg-border/50 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2 sm:w-auto"
                     >
                       <Cog6ToothIcon className="h-5 w-5" aria-hidden="true" />
-                      Actions
+                      {t('group.actions')}
                       <ChevronDownIcon
                         className={`h-4 w-4 transition-transform duration-200 ${showActionsMenu ? 'rotate-180' : ''}`}
                         aria-hidden="true"
@@ -757,7 +761,7 @@ export default function GroupDetailPage() {
                             role="menuitem"
                           >
                             <UserGroupIcon className="h-4 w-4 text-text-muted" aria-hidden="true" />
-                            Manage members
+                            {t('group.manageMembers')}
                           </button>
 
                           {/* Invite members */}
@@ -768,7 +772,7 @@ export default function GroupDetailPage() {
                             role="menuitem"
                           >
                             <UserGroupIcon className="h-4 w-4 text-text-muted" aria-hidden="true" />
-                            Invite members
+                            {t('group.inviteMembers')}
                           </button>
 
                           {/* Start Closure — only when period is OPEN */}
@@ -780,7 +784,7 @@ export default function GroupDetailPage() {
                               role="menuitem"
                             >
                               <LockClosedIcon className="h-4 w-4 text-text-muted" aria-hidden="true" />
-                              Start Closure
+                              {t('group.startClosure')}
                             </button>
                           )}
 
@@ -794,7 +798,7 @@ export default function GroupDetailPage() {
                             role="menuitem"
                           >
                             <PencilIcon className="h-4 w-4 text-text-muted" aria-hidden="true" />
-                            Edit group
+                            {t('group.editGroup')}
                           </button>
 
                           {/* Delete group */}
@@ -805,7 +809,7 @@ export default function GroupDetailPage() {
                             role="menuitem"
                           >
                             <TrashIcon className="h-4 w-4" aria-hidden="true" />
-                            Delete group
+                            {t('group.deleteGroup')}
                           </button>
                         </div>
                       </>
@@ -820,7 +824,7 @@ export default function GroupDetailPage() {
                   className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-cta bg-white px-5 py-3 font-heading text-sm font-semibold text-cta transition-all duration-200 hover:bg-cta/5 focus:outline-none focus:ring-2 focus:ring-cta focus:ring-offset-2 sm:w-auto"
                 >
                   <ArrowRightStartOnRectangleIcon className="h-5 w-5" aria-hidden="true" />
-                  Leave group
+                  {t('group.leaveGroup')}
                 </button>
               )}
             </div>
@@ -834,7 +838,7 @@ export default function GroupDetailPage() {
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2">
                 <LockClosedIcon className="h-4 w-4 flex-shrink-0 text-primary" aria-hidden="true" />
-                <span className="truncate text-sm font-semibold text-text">Settlement Period</span>
+                <span className="truncate text-sm font-semibold text-text">{t('settlement.period')}</span>
               </div>
               <span
                 className={`inline-block flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
@@ -847,16 +851,16 @@ export default function GroupDetailPage() {
                         : 'bg-error/10 text-error'
                 }`}
               >
-                {currentPeriod.status}
+                {t(`settlement.status${currentPeriod.status}`)}
               </span>
             </div>
 
             {/* Row 2: Status description */}
             <p className="mt-1 text-xs text-text-muted">
-              {currentPeriod.status === 'OPEN' && 'Open — expenses can be added and edited'}
-              {currentPeriod.status === 'CLOSING' && 'Closing — recording payments, awaiting acceptance'}
-              {currentPeriod.status === 'CLOSED' && 'Closed period — no further changes'}
-              {currentPeriod.status === 'FINAL' && 'Final — group is permanently closed'}
+              {currentPeriod.status === 'OPEN' && t('settlement.open')}
+              {currentPeriod.status === 'CLOSING' && t('settlement.closing')}
+              {currentPeriod.status === 'CLOSED' && t('settlement.closed')}
+              {currentPeriod.status === 'FINAL' && t('settlement.final')}
             </p>
 
             {/* Row 3: Partial / Final buttons (CLOSING + owner + ready) */}
@@ -869,7 +873,7 @@ export default function GroupDetailPage() {
                   className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-secondary bg-white px-3 py-1.5 text-xs font-semibold text-secondary transition-all duration-200 hover:bg-secondary/5 focus:outline-none focus:ring-2 focus:ring-secondary/30 disabled:opacity-50"
                 >
                   <ArrowPathIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                  {closureLoading ? '...' : 'Partial'}
+                  {closureLoading ? '...' : t('group.partialClosure')}
                 </button>
                 <button
                   type="button"
@@ -878,30 +882,30 @@ export default function GroupDetailPage() {
                   className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-error bg-white px-3 py-1.5 text-xs font-semibold text-error transition-all duration-200 hover:bg-error/5 focus:outline-none focus:ring-2 focus:ring-error/30 disabled:opacity-50"
                 >
                   <ArchiveBoxIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                  {closureLoading ? '...' : 'Final'}
+                  {closureLoading ? '...' : t('group.finalClosure')}
                 </button>
               </div>
             )}
 
             {/* Status messages for CLOSING period (shown to all) */}
-            {currentPeriod.status === 'CLOSING' && (
-              <div className="mt-2 text-xs">
-                {payments.length === 0 && (
-                  <p className="text-text-muted">No payments recorded yet.</p>
-                )}
-                {pendingPayments.length > 0 && (
-                  <p className="text-warning">
-                    {pendingPayments.length} payment{pendingPayments.length !== 1 ? 's' : ''} waiting for acceptance.
-                  </p>
-                )}
-                {pendingPayments.length === 0 && !allBalancesZero && (
-                  <p className="text-error">Balances not settled. Record more payments.</p>
-                )}
-                {pendingPayments.length === 0 && allBalancesZero && acceptedPayments.length === 0 && (
-                  <p className="text-text-muted">No payments needed — balances are settled.</p>
-                )}
-              </div>
-            )}
+              {currentPeriod.status === 'CLOSING' && (
+                <div className="mt-2 text-xs">
+                  {payments.length === 0 && (
+                    <p className="text-text-muted">{t('group.noPayments')}</p>
+                  )}
+                  {pendingPayments.length > 0 && (
+                    <p className="text-warning">
+                      {t('payment.paymentsWaiting', { count: pendingPayments.length })}
+                    </p>
+                  )}
+                  {pendingPayments.length === 0 && !allBalancesZero && (
+                    <p className="text-error">{t('payment.balancesNotSettled')}</p>
+                  )}
+                  {pendingPayments.length === 0 && allBalancesZero && acceptedPayments.length === 0 && (
+                    <p className="text-text-muted">{t('payment.noPaymentsNeeded')}</p>
+                  )}
+                </div>
+              )}
 
             {/* Closure error */}
             {closureError && (
@@ -917,10 +921,10 @@ export default function GroupDetailPage() {
 
         {/* ---- Members section ---- */}
         <section className="mb-4">
-          <h2 className="font-heading text-xl font-bold text-primary">Members</h2>
+          <h2 className="font-heading text-xl font-bold text-primary">{t('group.members')}</h2>
 
           {members.length === 0 ? (
-            <p className="mt-4 text-sm text-text-muted">No members yet.</p>
+            <p className="mt-4 text-sm text-text-muted">{t('group.noMembers')}</p>
           ) : (
             <ul className="mt-4 divide-y divide-border rounded-xl border border-border bg-white">
               {members.map((member) => {
@@ -938,12 +942,12 @@ export default function GroupDetailPage() {
                         {memberName(member)}
                         {group.ownerId === member.userId && (
                           <span className="ml-2 inline-block rounded-full bg-cta/10 px-2 py-0.5 font-heading text-[10px] font-semibold uppercase tracking-wider text-cta">
-                            Owner
+                            {t('member.owner')}
                           </span>
                         )}
                         {member.isFrozen && (
                           <span className="ml-2 inline-block rounded-full bg-blue-100 px-2 py-0.5 font-heading text-[10px] font-semibold uppercase tracking-wider text-blue-600">
-                            ❄️ Frozen
+                            {t('member.frozen')}
                           </span>
                         )}
                       </p>
@@ -956,7 +960,7 @@ export default function GroupDetailPage() {
                       <span
                         className="inline-block rounded-full bg-primary/5 px-2.5 py-0.5 text-xs font-semibold text-text-muted"
                       >
-                        spent {formatCurrency(totalSpentByUser[member.userId], currency)}
+                        {t('group.spent')} {formatCurrency(totalSpentByUser[member.userId], currency)}
                       </span>
                     )}
                   </li>
@@ -968,13 +972,13 @@ export default function GroupDetailPage() {
 
         {/* ---- Balances section ---- */}
         <section className="mb-4">
-          <h2 className="font-heading text-xl font-bold text-primary">Balances</h2>
+          <h2 className="font-heading text-xl font-bold text-primary">{t('group.balances')}</h2>
 
           {balances.length === 0 ? (
             <div className="mt-4 rounded-xl border border-border bg-white px-5 py-6 text-center">
               <BanknotesIcon className="mx-auto h-8 w-8 text-text-muted/40" aria-hidden="true" />
               <p className="mt-2 text-sm text-text-muted">
-                Everyone is settled up. No balances to show.
+                {t('group.noBalances')}
               </p>
             </div>
           ) : (
@@ -1020,7 +1024,7 @@ export default function GroupDetailPage() {
                         <div className="mt-2 ml-12 space-y-1">
                           {owes.map((item) => (
                             <p key={item.userId} className="text-xs text-error">
-                              owes{' '}
+                              {t('balance.owes')}{' '}
                               <span className="font-semibold">
                                 {item.nickName || item.email || item.userId}
                               </span>{' '}
@@ -1029,7 +1033,7 @@ export default function GroupDetailPage() {
                           ))}
                           {owed.map((item) => (
                             <p key={item.userId} className="text-xs text-success">
-                              is owed by{' '}
+                              {t('balance.isOwed')}{' '}
                               <span className="font-semibold">
                                 {item.nickName || item.email || item.userId}
                               </span>{' '}
@@ -1049,14 +1053,14 @@ export default function GroupDetailPage() {
         {/* ---- Expenses section ---- */}
         <section>
           <div className="flex items-center justify-between">
-            <h2 className="font-heading text-xl font-bold text-primary">Expenses</h2>
+            <h2 className="font-heading text-xl font-bold text-primary">{t('group.expenses')}</h2>
             <button
               type="button"
               onClick={() => setShowExpenseForm(true)}
               className="inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium text-secondary transition-colors duration-200 hover:text-secondary/80 focus:outline-none focus:ring-2 focus:ring-secondary/30 rounded-lg px-2 py-1"
             >
               <PlusIcon className="h-4 w-4" aria-hidden="true" />
-              Add
+              {t('expense.add')}
             </button>
           </div>
 
@@ -1064,7 +1068,7 @@ export default function GroupDetailPage() {
             <div className="mt-4 rounded-xl border border-border bg-white px-5 py-6 text-center">
               <ShoppingCartIcon className="mx-auto h-8 w-8 text-text-muted/40" aria-hidden="true" />
               <p className="mt-2 text-sm text-text-muted">
-                No expenses yet. Add your first expense to start splitting.
+                {t('group.noExpenses')}
               </p>
             </div>
           ) : (<>
@@ -1098,19 +1102,19 @@ export default function GroupDetailPage() {
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="font-heading text-base font-semibold text-text truncate">
-                            {expense.description || 'Untitled expense'}
+                            {expense.description || t('expense.untitled')}
                           </h3>
                           {isCollective && (
                             <span className="inline-flex items-center gap-1 rounded-full bg-secondary/10 px-2 py-0.5 text-xs font-semibold text-secondary">
                               <UserGroupIcon className="h-3 w-3" aria-hidden="true" />
-                              Collective
+                              {t('expense.collective')}
                             </span>
                           )}
                           {renderStatusBadge(expense)}
                           {isLocked && (
                             <span className="inline-flex items-center gap-1 rounded-full bg-border/50 px-2 py-0.5 text-xs text-text-muted">
                               <LockClosedIcon className="h-3 w-3" aria-hidden="true" />
-                              Locked
+                              {t('expense.locked')}
                             </span>
                           )}
                         </div>
@@ -1118,12 +1122,10 @@ export default function GroupDetailPage() {
                           <span
                             className={`inline-block rounded-full px-2 py-0.5 font-medium ${CATEGORY_STYLES[expense.category] || CATEGORY_STYLES.OTHER}`}
                           >
-                            {expense.category
-                              ? expense.category.charAt(0) + expense.category.slice(1).toLowerCase()
-                              : 'Other'}
+                            {t(`expense.categories.${expense.category}`)}
                           </span>
                           <span className="text-text-muted">
-                            paid by{' '}
+                            {t('expense.paidBy')}{' '}
                             <span className="font-semibold text-text">
                               {expense.payer?.nickName || expense.payer?.email || 'Unknown'}
                             </span>
@@ -1218,7 +1220,7 @@ export default function GroupDetailPage() {
                             className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-secondary px-3.5 py-2 text-xs font-semibold text-white transition-all duration-200 hover:bg-secondary/90 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-1"
                           >
                             <PlusIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                            Report my item
+                            {t('expense.reportItem')}
                           </button>
                         )}
                       </div>
@@ -1228,7 +1230,7 @@ export default function GroupDetailPage() {
                     {isCollective && showItemModalFor === expense.id && (
                       <div className="mt-3 rounded-lg border border-border bg-background p-4">
                         <p className="mb-3 text-xs font-semibold text-text">
-                          {userItem ? 'Edit your item' : 'Report your item'}
+                          {userItem ? t('expense.editItem') : t('expense.reportItem')}
                         </p>
                         <ItemReportForm
                           groupId={id}
@@ -1285,7 +1287,7 @@ export default function GroupDetailPage() {
                                       onClick={() => setShowItemModalFor(expense.id)}
                                       className="cursor-pointer text-xs text-secondary transition-colors duration-200 hover:text-secondary/80 focus:outline-none focus:ring-2 focus:ring-secondary/30 rounded px-1 py-0.5"
                                     >
-                                      Edit
+                                      {t('expense.edit')}
                                     </button>
                                   )}
                                 </div>
@@ -1300,7 +1302,7 @@ export default function GroupDetailPage() {
                     {!isCollective && expense.splits && expense.splits.length > 0 && (
                       <div className="mt-3 border-t border-border pt-3">
                         <p className="mb-1.5 text-xs font-medium text-text-muted uppercase tracking-wider">
-                          Split {expense.splitType === 'EQUAL' ? 'equally' : 'by percentage'}
+                          {expense.splitType === 'EQUAL' ? t('expense.splitByEqual') : t('expense.splitByPercentage')}
                         </p>
                         <div className="flex flex-wrap gap-2">
                           {expense.splits.map((split) => {
@@ -1339,7 +1341,7 @@ export default function GroupDetailPage() {
                   disabled={expensesLoading}
                   className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-white px-5 py-2.5 text-sm font-semibold text-secondary transition-all duration-200 hover:bg-secondary/5 focus:outline-none focus:ring-2 focus:ring-secondary/30 disabled:opacity-50"
                 >
-                  {expensesLoading ? 'Loading...' : 'Load more expenses'}
+                  {expensesLoading ? t('common.loading') : t('expense.loadMore')}
                 </button>
               </div>
             )}
@@ -1424,9 +1426,9 @@ export default function GroupDetailPage() {
       {/* Delete expense confirmation */}
       {deletingExpenseId && (
         <ConfirmDialog
-          title="Delete expense"
-          message="Are you sure you want to delete this expense? This action cannot be undone."
-          confirmLabel="Delete"
+          title={t('expense.delete')}
+          message={t('expense.deleteConfirm')}
+          confirmLabel={t('common.delete')}
           variant="danger"
           onConfirm={handleDeleteExpense}
           onClose={() => setDeletingExpenseId(null)}
@@ -1436,9 +1438,9 @@ export default function GroupDetailPage() {
       {/* Delete payment confirmation */}
       {deletingPaymentId && (
         <ConfirmDialog
-          title="Delete payment"
-          message="Are you sure you want to delete this payment? Balances will be recalculated."
-          confirmLabel="Delete"
+          title={t('payment.delete')}
+          message={t('payment.deleteConfirm')}
+          confirmLabel={t('common.delete')}
           variant="danger"
           onConfirm={handleDeletePayment}
           onClose={() => setDeletingPaymentId(null)}
@@ -1448,9 +1450,9 @@ export default function GroupDetailPage() {
       {/* Start Closure confirmation */}
       {showStartClosureConfirm && (
         <ConfirmDialog
-          title="Start Closure"
-          message="Freeze expenses and begin the settlement period. Members will need to record payments to settle their debts before closure completes."
-          confirmLabel="Start Closure"
+          title={t('group.startClosure')}
+          message={t('settlement.startConfirm')}
+          confirmLabel={t('group.startClosure')}
           variant="warning"
           onConfirm={async () => {
             await handleStartClosure();
@@ -1463,9 +1465,9 @@ export default function GroupDetailPage() {
       {/* Leave group confirmation */}
       {showLeaveGroupConfirm && (
         <ConfirmDialog
-          title="Leave group"
-          message="Are you sure you want to leave this group? You will no longer see it in your groups list."
-          confirmLabel="Leave"
+          title={t('member.leave')}
+          message={t('member.leaveConfirm')}
+          confirmLabel={t('member.leave')}
           variant="warning"
           onConfirm={handleLeaveGroup}
           onClose={() => setShowLeaveGroupConfirm(false)}
@@ -1475,12 +1477,12 @@ export default function GroupDetailPage() {
       {/* Delete group confirmation */}
       {showDeleteGroupConfirm && (
         <ConfirmDialog
-          title="Delete group"
+          title={t('group.deleteGroup')}
           message={expenses.length > 0
             ? `This group has ${expenses.length} expense${expenses.length !== 1 ? 's' : ''}. Deleting the group will also delete all associated data. This action cannot be undone.`
             : 'Are you sure you want to delete this group? This action cannot be undone.'}
           warning={expenses.length > 0 ? 'All expenses, payments, and member data will be permanently deleted.' : undefined}
-          confirmLabel="Delete group"
+          confirmLabel={t('group.deleteGroup')}
           variant="danger"
           onConfirm={handleDeleteGroup}
           onClose={() => setShowDeleteGroupConfirm(false)}
@@ -1506,7 +1508,7 @@ export default function GroupDetailPage() {
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-error/10">
                 <XMarkIcon className="h-5 w-5 text-error" aria-hidden="true" />
               </div>
-              <h3 className="font-heading text-lg font-bold text-error">Reject Payment</h3>
+              <h3 className="font-heading text-lg font-bold text-error">{t('payment.reject')}</h3>
             </div>
             <p className="mt-2 text-sm text-text-muted">
               Provide a reason for rejecting this payment. The sender will be notified.
@@ -1527,14 +1529,14 @@ export default function GroupDetailPage() {
                 }}
                 className="flex-1 cursor-pointer rounded-lg border border-border px-4 py-3 text-sm font-medium text-text-muted transition-colors duration-200 hover:bg-border/30 focus:outline-none focus:ring-2 focus:ring-secondary/30"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
                 onClick={handleRejectPayment}
                 className="flex-1 cursor-pointer rounded-lg bg-error px-4 py-3 font-heading text-sm font-semibold text-white transition-colors duration-200 hover:bg-error/90 focus:outline-none focus:ring-2 focus:ring-error focus:ring-offset-2"
               >
-                Reject
+                {t('payment.reject')}
               </button>
             </div>
           </div>
@@ -1614,7 +1616,7 @@ export default function GroupDetailPage() {
                         <div className="border-t border-border bg-background/50 px-4 py-4">
                           {/* Expenses */}
                           <div className="mb-4">
-                            <h4 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Expenses</h4>
+                            <h4 className="text-xs font-semibold uppercase tracking-wider text-text-muted">{t('group.expenses')}</h4>
                             {pExpenses.length === 0 ? (
                               <p className="mt-2 text-sm text-text-muted">No expenses in this period.</p>
                             ) : (
@@ -1622,9 +1624,9 @@ export default function GroupDetailPage() {
                                 {pExpenses.map((exp) => (
                                   <li key={exp.id} className="flex items-center justify-between rounded-lg border border-border bg-white px-3 py-2 text-sm">
                                     <div>
-                                      <span className="font-medium text-text">{exp.description || 'Untitled'}</span>
+                                      <span className="font-medium text-text">{exp.description || t('expense.untitled')}</span>
                                       <span className="ml-2 text-xs text-text-muted">
-                                        paid by {exp.payer?.nickName || exp.payer?.email || 'Unknown'}
+                                        {t('expense.paidBy')} {exp.payer?.nickName || exp.payer?.email || 'Unknown'}
                                       </span>
                                     </div>
                                     <span className="font-semibold text-text">
@@ -1638,7 +1640,7 @@ export default function GroupDetailPage() {
 
                           {/* Payments */}
                           <div className="mb-4">
-                            <h4 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Payments</h4>
+                            <h4 className="text-xs font-semibold uppercase tracking-wider text-text-muted">{t('group.payments')}</h4>
                             {pPayments.length === 0 ? (
                               <p className="mt-2 text-sm text-text-muted">No payments in this period.</p>
                             ) : (
@@ -1652,7 +1654,7 @@ export default function GroupDetailPage() {
                                         {pay.toUser?.nickName || pay.toUser?.email || 'Unknown'}
                                       </span>
                                       <span className="ml-2 text-xs text-text-muted">
-                                        {pay.status === 'ACCEPTED' ? 'Accepted' : pay.status}
+                                        {pay.status === 'ACCEPTED' ? t('payment.accepted') : pay.status}
                                       </span>
                                     </div>
                                     <span className="font-semibold text-cta">
@@ -1687,7 +1689,7 @@ export default function GroupDetailPage() {
                                           <div className="mt-1">
                                             {b.owedTo.map((debt) => (
                                               <p key={debt.userId} className="text-xs text-error">
-                                                owes <span className="font-medium">{debt.nickName}</span> {formatCurrency(debt.amount, currency)}
+                                                {t('balance.owes')} <span className="font-medium">{debt.nickName}</span> {formatCurrency(debt.amount, currency)}
                                               </p>
                                             ))}
                                           </div>
@@ -1696,7 +1698,7 @@ export default function GroupDetailPage() {
                                           <div className="mt-1">
                                             {b.owedBy.map((debt) => (
                                               <p key={debt.userId} className="text-xs text-success">
-                                                <span className="font-medium">{debt.nickName}</span> owes them {formatCurrency(debt.amount, currency)}
+                                                {t('balance.isOwed')} <span className="font-medium">{debt.nickName}</span> {formatCurrency(debt.amount, currency)}
                                               </p>
                                             ))}
                                           </div>

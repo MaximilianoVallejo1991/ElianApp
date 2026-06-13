@@ -1,6 +1,24 @@
 import prisma from '../lib/prisma.js';
 import { AppError } from '../utils/errors.js';
 
+const MAX_GROUP_MEMBERS = 10;
+
+/**
+ * Count active + pending memberships in a group.
+ * Used to enforce the maximum member limit.
+ *
+ * @param {string} groupId
+ * @returns {Promise<number>}
+ */
+async function countCurrentMembers(groupId) {
+  return prisma.groupMember.count({
+    where: {
+      groupId,
+      status: { in: ['ACTIVE', 'PENDING'] },
+    },
+  });
+}
+
 // ---------------------------------------------------------------------------
 //  Membership Service
 // ---------------------------------------------------------------------------
@@ -33,6 +51,16 @@ export async function inviteMember(groupId, target, inviterId) {
 
   if (group.ownerId !== inviterId) {
     throw new AppError('FORBIDDEN', 403, 'Only owner can invite members');
+  }
+
+  // -- Check member limit ---------------------------------------------------
+  const currentCount = await countCurrentMembers(groupId);
+  if (currentCount >= MAX_GROUP_MEMBERS) {
+    throw new AppError(
+      'GROUP_FULL',
+      400,
+      `Group already has ${MAX_GROUP_MEMBERS} members. Remove a member before inviting new ones.`,
+    );
   }
 
   // -- Find target user -------------------------------------------------------

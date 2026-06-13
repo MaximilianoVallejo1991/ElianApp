@@ -5,6 +5,7 @@ import {
   UserIcon,
 } from '@heroicons/react/24/outline';
 import { NumericFormat } from 'react-number-format';
+import { useTranslation } from 'react-i18next';
 import { expenseService } from '../services/api';
 
 const CATEGORIES = ['FOOD', 'TRANSPORT', 'HOUSING', 'ENTERTAINMENT', 'OTHER'];
@@ -12,7 +13,7 @@ const CATEGORIES = ['FOOD', 'TRANSPORT', 'HOUSING', 'ENTERTAINMENT', 'OTHER'];
 const SPLIT_TYPES = [
   { value: 'EQUAL', label: 'Equal' },
   { value: 'PERCENTAGE', label: 'Percentages' },
-  { value: 'COLLECTIVE', label: 'Collective' },
+  { value: 'COLLECTIVE', label: 'Exact' },
 ];
 
 /**
@@ -46,6 +47,8 @@ export default function ExpenseForm({
   editMode = false,
   initialData = null,
 }) {
+  const { t } = useTranslation();
+
   // ------------------------------------------------------------------
   // Base form state (Step 1)
   // ------------------------------------------------------------------
@@ -368,7 +371,7 @@ const validateStep2 = () => {
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
           <h2 className="font-heading text-xl font-bold text-primary">
-            {editMode ? 'Edit expense' : 'Add expense'}
+            {editMode ? t('expense.edit') : t('group.addExpense')}
           </h2>
           <button
             type="button"
@@ -400,7 +403,7 @@ const validateStep2 = () => {
               {/* Description */}
               <div>
                 <label htmlFor="expense-description" className="mb-1.5 block text-sm font-semibold text-text">
-                  Description
+                  {t('expense.description')}
                 </label>
                 <input
                   id="expense-description"
@@ -417,7 +420,7 @@ const validateStep2 = () => {
               {/* Amount + Currency */}
               <div>
                 <label htmlFor="expense-amount" className="mb-1.5 block text-sm font-semibold text-text">
-                  Amount
+                  {t('expense.amount')}
                 </label>
                 <div className="relative">
                   <CurrencyDollarIcon
@@ -445,7 +448,7 @@ const validateStep2 = () => {
               {/* Date */}
               <div>
                 <label htmlFor="expense-date" className="mb-1.5 block text-sm font-semibold text-text">
-                  Date
+                  {t('expense.date')}
                 </label>
                 <input
                   id="expense-date"
@@ -459,7 +462,7 @@ const validateStep2 = () => {
               {/* Category */}
               <div>
                 <label htmlFor="expense-category" className="mb-1.5 block text-sm font-semibold text-text">
-                  Category
+                  {t('expense.category')}
                 </label>
                 <select
                   id="expense-category"
@@ -469,7 +472,7 @@ const validateStep2 = () => {
                 >
                   {CATEGORIES.map((cat) => (
                     <option key={cat} value={cat}>
-                      {cat.charAt(0) + cat.slice(1).toLowerCase()}
+                      {t(`expense.categories.${cat}`)}
                     </option>
                   ))}
                 </select>
@@ -478,7 +481,7 @@ const validateStep2 = () => {
               {/* Payer */}
               <div>
                 <label htmlFor="expense-payer" className="mb-1.5 block text-sm font-semibold text-text">
-                  Paid by
+                  {t('expense.paidBy')}
                 </label>
                 <select
                   id="expense-payer"
@@ -489,7 +492,7 @@ const validateStep2 = () => {
                   {members.map((m) => (
                     <option key={m.userId} value={m.userId}>
                       {memberName(m)}
-                      {m.userId === currentUserId ? ' (you)' : ''}
+                      {m.userId === currentUserId ? ` (${t('common.you')})` : ''}
                     </option>
                   ))}
                 </select>
@@ -498,7 +501,7 @@ const validateStep2 = () => {
               {/* Split type */}
               <div>
                 <label htmlFor="expense-split-type" className="mb-1.5 block text-sm font-semibold text-text">
-                  Split type
+                  {t('expense.splitType')}
                 </label>
                 <select
                   id="expense-split-type"
@@ -508,11 +511,16 @@ const validateStep2 = () => {
                   }}
                   className="w-full cursor-pointer rounded-lg border border-border bg-white px-4 py-3 text-text transition-colors duration-200 focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary/20"
                 >
-                  {SPLIT_TYPES.map((st) => (
-                    <option key={st.value} value={st.value}>
-                      {st.label}
-                    </option>
-                  ))}
+                  {SPLIT_TYPES.map((st) => {
+                    const labelKey = st.value === 'EQUAL' ? 'expense.equal'
+                      : st.value === 'PERCENTAGE' ? 'expense.percentage'
+                      : 'expense.exact';
+                    return (
+                      <option key={st.value} value={st.value}>
+                        {t(labelKey)}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
@@ -523,7 +531,7 @@ const validateStep2 = () => {
                   onClick={onClose}
                   className="flex-1 cursor-pointer rounded-lg border border-border px-4 py-3 text-sm font-medium text-text-muted transition-colors duration-200 hover:bg-border/30 focus:outline-none focus:ring-2 focus:ring-secondary/30"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="button"
@@ -572,20 +580,20 @@ const validateStep2 = () => {
                           />
                           <span className="truncate text-sm font-medium text-text">
                             {memberName(m)}
-                            {m.userId === currentUserId ? ' (you)' : ''}
-                            {m.isFrozen && (
-                              <span className="ml-1.5 inline-block text-blue-500" title="This member is frozen and cannot create expenses">
-                                ❄️
-                              </span>
-                            )}
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                  {selectedParticipantIds.length > 0 && (
-                    <p className="text-xs text-text-muted">
-                      {selectedParticipantIds.length} participant{selectedParticipantIds.length !== 1 ? 's' : ''} selected
+                      {m.userId === currentUserId ? ` (${t('common.you')})` : ''}
+                      {m.isFrozen && (
+                        <span className="ml-1.5 inline-block text-blue-500" title="This member is frozen and cannot create expenses">
+                          ❄️
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            {selectedParticipantIds.length > 0 && (
+              <p className="text-xs text-text-muted">
+                {selectedParticipantIds.length} participant{selectedParticipantIds.length !== 1 ? 's' : ''} selected
                     </p>
                   )}
                 </div>
@@ -742,7 +750,7 @@ const validateStep2 = () => {
                                 />
                                 <span className="truncate text-sm font-medium text-text">
                                   {memberName(m)}
-                                  {m.userId === currentUserId ? ' (you)' : ''}
+                                  {m.userId === currentUserId ? ` (${t('common.you')})` : ''}
                                   {m.isFrozen && (
                                     <span className="ml-1.5 inline-block text-blue-500" title="This member is frozen">
                                       ❄️
@@ -767,7 +775,7 @@ const validateStep2 = () => {
                           onClick={handleBack}
                           className="flex-1 cursor-pointer rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-text-muted transition-colors duration-200 hover:bg-border/30 focus:outline-none focus:ring-2 focus:ring-secondary/30"
                         >
-                          Back
+                          {t('common.back')}
                         </button>
                         <button
                           type="button"
@@ -842,7 +850,7 @@ const validateStep2 = () => {
                           onClick={handleBack}
                           className="flex-1 cursor-pointer rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-text-muted transition-colors duration-200 hover:bg-border/30 focus:outline-none focus:ring-2 focus:ring-secondary/30"
                         >
-                          Back
+                          {t('common.back')}
                         </button>
                         <button
                           type="submit"
@@ -852,10 +860,10 @@ const validateStep2 = () => {
                           {loading ? (
                             <>
                               <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                              {editMode ? 'Saving…' : 'Creating…'}
+                              {editMode ? t('expense.saving') : t('group.addExpense')}
                             </>
                           ) : (
-                            editMode ? 'Save changes' : 'Create expense'
+                            editMode ? t('common.save') : t('group.addExpense')
                           )}
                         </button>
                       </div>
@@ -873,7 +881,7 @@ const validateStep2 = () => {
                     disabled={loading}
                     className="flex-1 cursor-pointer rounded-lg border border-border px-4 py-3 text-sm font-medium text-text-muted transition-colors duration-200 hover:bg-border/30 focus:outline-none focus:ring-2 focus:ring-secondary/30 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Back
+                    {t('common.back')}
                   </button>
                   <button
                     type="submit"
@@ -883,10 +891,10 @@ const validateStep2 = () => {
                     {loading ? (
                       <>
                         <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                        {editMode ? 'Saving…' : 'Creating…'}
+                        {editMode ? t('expense.saving') : t('group.addExpense')}
                       </>
                     ) : (
-                      editMode ? 'Save changes' : 'Add expense'
+                      editMode ? t('common.save') : t('group.addExpense')
                     )}
                   </button>
                 </div>
@@ -900,7 +908,7 @@ const validateStep2 = () => {
                   disabled={loading}
                   className="w-full cursor-pointer rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-text-muted transition-colors duration-200 hover:bg-border/30 focus:outline-none focus:ring-2 focus:ring-secondary/30 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
               )}
             </>

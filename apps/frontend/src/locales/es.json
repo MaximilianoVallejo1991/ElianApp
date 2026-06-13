@@ -5,9 +5,11 @@
   },
   "nav": {
     "myGroups": "Mis Grupos",
-    "signOut": "Cerrar sesión"
+    "signOut": "Cerrar sesión",
+    "backToGroups": "Volver a grupos"
   },
   "group": {
+    "title": "Grupo",
     "members": "Miembros",
     "balances": "Balances",
     "expenses": "Gastos",
@@ -20,7 +22,6 @@
     "noPaymentsOpen": "Los pagos solo se pueden registrar durante un período de cierre.",
     "noPaymentsClosed": "No hay pagos en este período cerrado.",
     "noPaymentsFinal": "El grupo está cerrado permanentemente.",
-    "paymentsOpen": "Los pagos solo se pueden registrar durante un período de cierre.",
     "addExpense": "Agregar gasto",
     "recordPayment": "Registrar pago",
     "editGroup": "Editar grupo",
@@ -38,6 +39,15 @@
     "noGroups": "No hay grupos todavía",
     "createGroupDescription": "Creá un grupo para empezar a dividir gastos.",
     "signedInAs": "Conectado como",
+    "spent": "gastó",
+    "groupName": "Nombre del grupo",
+    "groupNamePlaceholder": "Viaje a Cancún",
+    "currency": "Moneda",
+    "balanceMode": "Tipo de liquidación",
+    "dynamic": "Dinámico",
+    "dynamicDescription": "Los balances se actualizan continuamente. Ideal para grupos informales y amigos.",
+    "static": "Estático",
+    "staticDescription": "Períodos de liquidación con congelación y aceptación de pagos. Ideal para compañeros de cuarto y arreglos formales.",
     "members_one": "{{count}} miembro",
     "members_other": "{{count}} miembros"
   },
@@ -46,12 +56,27 @@
     "add": "Agregar gasto",
     "edit": "Editar",
     "delete": "Eliminar",
+    "deleteConfirm": "¿Estás seguro de que querés eliminar este gasto?",
     "amount": "Monto",
     "description": "Descripción",
     "category": "Categoría",
     "paidBy": "pagado por",
     "splitType": "Tipo de división",
-    "collective": "Colectivo",
+    "equal": "Partes iguales",
+    "percentage": "Porcentajes",
+    "exact": "Exacto",
+    "collective": "Exacto",
+    "splitByEqual": "Dividido en partes iguales",
+    "splitByPercentage": "Dividido por porcentajes",
+    "splitByExact": "Dividido por montos exactos",
+    "date": "Fecha",
+    "categories": {
+      "FOOD": "Comida",
+      "TRANSPORT": "Transporte",
+      "HOUSING": "Vivienda",
+      "ENTERTAINMENT": "Entretenimiento",
+      "OTHER": "Otros"
+    },
     "selectParticipants": "Seleccionar participantes",
     "noExpenses": "No hay gastos todavía.",
     "reportItem": "Reportar gasto",
@@ -59,9 +84,15 @@
     "deleteItem": "Eliminar",
     "yourItem": "Tu gasto",
     "editItem": "Editar tu gasto",
+    "saving": "Guardando…",
+    "deleting": "Eliminando…",
     "mismatch": "Desajuste",
+    "mismatchWithAmount": "Desajuste ({{amount}})",
     "pending": "Pendiente",
-    "completed": "Completado"
+    "completed": "Completado",
+    "locked": "Bloqueado",
+    "loadMore": "Cargar más gastos",
+    "untitled": "Gasto sin título"
   },
   "payment": {
     "title": "Pagos",
@@ -69,12 +100,20 @@
     "paidTo": "Pagado a",
     "amount": "Monto",
     "method": "Método",
+    "description": "Registrá un pago que le hiciste a otro miembro del grupo. Los balances se actualizarán automáticamente.",
+    "noDebtsDescription": "Actualmente no le debés a nadie. Igualmente podés registrar pagos, pero quizás no sea necesario.",
     "accept": "Aceptar",
     "reject": "Rechazar",
     "delete": "Eliminar",
+    "deleteConfirm": "¿Estás seguro de que querés eliminar este pago? Los balances se recalcularán.",
     "pending": "Pendiente",
     "accepted": "Aceptado",
-    "rejected": "Rechazado"
+    "rejected": "Rechazado",
+    "loadMore": "Cargar más pagos",
+    "noPaymentsNeeded": "No se necesitan pagos — los balances están saldados.",
+    "paymentsWaiting": "{{count}} pago esperando aceptación.",
+    "paymentsWaiting_other": "{{count}} pagos esperando aceptación.",
+    "balancesNotSettled": "Balances no saldados. Registrá más pagos."
   },
   "balance": {
     "title": "Balances",
@@ -82,24 +121,33 @@
     "isOwed": "recibe",
     "settled": "Saldado",
     "youOwe": "Debés",
-    "youAreOwed": "Te deben"
+    "youAreOwed": "Te deben",
+    "everyoneSettled": "Todos están saldados."
   },
   "member": {
     "title": "Miembros",
-    "owner": "Dueño",
+    "owner": "Admin",
     "frozen": "❄️ Congelado",
     "freeze": "Congelar",
     "unfreeze": "Descongelar",
     "remove": "Eliminar",
     "leave": "Salir del grupo",
-    "invite": "Invitar"
+    "invite": "Invitar",
+    "leaveConfirm": "¿Estás seguro de que querés salir del grupo? Ya no lo verás en tu lista.",
+    "removeConfirm": "¿Estás seguro de que querés eliminar a este miembro?",
+    "removeDescription": "Eliminar a un miembro no borra sus gastos o pagos históricos."
   },
   "settlement": {
     "period": "Período de Liquidación",
+    "statusOPEN": "Abierto",
+    "statusCLOSING": "Cerrando",
+    "statusCLOSED": "Cerrado",
+    "statusFINAL": "Final",
     "open": "Abierto — se pueden agregar y editar gastos",
     "closing": "Cerrando — registrando pagos, esperando aceptación",
     "closed": "Período cerrado — sin cambios permitidos",
-    "final": "Final — el grupo está cerrado permanentemente"
+    "final": "Final — el grupo está cerrado permanentemente",
+    "startConfirm": "Congelar gastos y comenzar el período de liquidación. Los miembros deberán registrar pagos para saldar sus deudas antes de que se complete el cierre."
   },
   "auth": {
     "signIn": "Iniciar sesión",
@@ -111,9 +159,29 @@
     "forgotPassword": "¿Olvidaste tu contraseña?",
     "resetPassword": "Restablecer contraseña",
     "sendResetLink": "Enviar enlace",
+    "sendResetLinkSuccess": "Revisá tu email. Si existe una cuenta con ese email, recibirás un enlace para restablecer tu contraseña.",
     "newPassword": "Nueva contraseña",
     "confirmPassword": "Confirmar contraseña",
-    "rememberPassword": "¿Recordás tu contraseña?"
+    "resetSuccess": "Tu contraseña se restableció correctamente. Ya podés iniciar sesión con tu nueva contraseña.",
+    "invalidResetLink": "Este enlace de restablecimiento no es válido. Solicitá uno nuevo.",
+    "rememberPassword": "¿Recordás tu contraseña?",
+    "noAccount": "¿No tenés cuenta?",
+    "haveAccount": "¿Ya tenés cuenta?",
+    "registerWithInvite": "Te invitamos a unirte al grupo. Creá tu cuenta para aceptar.",
+    "checkEmail": "Revisá tu email"
+  },
+  "form": {
+    "amount": "Monto",
+    "description": "Descripción",
+    "method": "Método",
+    "methodOptional": "Método (opcional)",
+    "paidTo": "Pagado a",
+    "selectMember": "Seleccioná un miembro…",
+    "noMembersAvailable": "No hay otros miembros en este grupo.",
+    "cash": "Efectivo",
+    "bankTransfer": "Transferencia bancaria",
+    "itemAmount": "Tu parte",
+    "itemDescription": "Descripción de tu gasto"
   },
   "common": {
     "save": "Guardar",
@@ -129,9 +197,16 @@
     "search": "Buscar",
     "noResults": "Sin resultados",
     "yes": "Sí",
-    "no": "No"
+    "no": "No",
+    "unknown": "Desconocido",
+    "you": "vos",
+    "notFound": "No encontrado"
   },
   "footer": {
     "rights": "© {{year}} SalvathorProyects. Todos los derechos reservados."
+  },
+  "language": {
+    "es": "Español",
+    "en": "Inglés"
   }
 }

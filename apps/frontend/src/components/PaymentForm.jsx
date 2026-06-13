@@ -3,6 +3,7 @@ import {
   XMarkIcon,
   CurrencyDollarIcon,
 } from '@heroicons/react/24/outline';
+import { useTranslation } from 'react-i18next';
 import { paymentService } from '../services/api';
 
 /**
@@ -27,6 +28,7 @@ export default function PaymentForm({
   onSuccess,
   onClose,
 }) {
+  const { t } = useTranslation();
   const [toUserId, setToUserId] = useState(initialToUserId);
   const [amount, setAmount] = useState(initialAmount);
   const [method, setMethod] = useState('');
@@ -106,7 +108,7 @@ export default function PaymentForm({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
           <h2 className="font-heading text-xl font-bold text-primary">
-            Record payment
+            {t('group.recordPayment')}
           </h2>
           <button
             type="button"
@@ -131,8 +133,7 @@ export default function PaymentForm({
           )}
 
           <p className="text-sm text-text-muted">
-            Record a payment you made to another group member. Balances will update
-            automatically.
+            {t('payment.description')}
           </p>
 
           {hasNoDebts && (
@@ -140,18 +141,18 @@ export default function PaymentForm({
               className="rounded-lg border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-warning"
               role="alert"
             >
-              You don't currently owe anyone. Payments can still be recorded, but they may not be needed.
+              {t('payment.noDebtsDescription')}
             </div>
           )}
 
           {/* To user */}
           <div>
             <label htmlFor="payment-to" className="mb-1.5 block text-sm font-semibold text-text">
-              Paid to
+              {t('form.paidTo')}
             </label>
             {receivers.length === 0 ? (
               <p className="text-sm text-text-muted italic">
-                No other members in this group.
+                {t('form.noMembersAvailable')}
               </p>
             ) : (
               <select
@@ -163,7 +164,7 @@ export default function PaymentForm({
                 className="w-full cursor-pointer rounded-lg border border-border bg-white px-4 py-3 text-text transition-colors duration-200 focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary/20"
               >
                 <option value="" disabled>
-                  Select a member…
+                  {t('form.selectMember')}
                 </option>
                 {receivers.map((m) => (
                   <option key={m.userId} value={m.userId}>
@@ -177,7 +178,7 @@ export default function PaymentForm({
           {/* Amount */}
           <div>
             <label htmlFor="payment-amount" className="mb-1.5 block text-sm font-semibold text-text">
-              Amount
+              {t('payment.amount')}
             </label>
             <div className="relative">
               <CurrencyDollarIcon
@@ -204,8 +205,7 @@ export default function PaymentForm({
           {/* Method (optional) */}
           <div>
             <label htmlFor="payment-method" className="mb-1.5 block text-sm font-semibold text-text">
-              Method{' '}
-              <span className="font-normal text-text-muted">(optional)</span>
+              {t('form.methodOptional')}
             </label>
             <input
               id="payment-method"
@@ -225,7 +225,7 @@ export default function PaymentForm({
               disabled={loading}
               className="flex-1 cursor-pointer rounded-lg border border-border px-4 py-3 text-sm font-medium text-text-muted transition-colors duration-200 hover:bg-border/30 focus:outline-none focus:ring-2 focus:ring-secondary/30 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
@@ -235,10 +235,10 @@ export default function PaymentForm({
               {loading ? (
                 <>
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Recording…
+                  {t('group.recordPayment')}…
                 </>
               ) : (
-                'Record payment'
+                t('group.recordPayment')
               )}
             </button>
           </div>

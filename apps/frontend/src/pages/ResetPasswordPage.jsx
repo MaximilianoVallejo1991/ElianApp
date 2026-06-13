@@ -6,11 +6,13 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
 import { authService } from '../services/api';
 
 export default function ResetPasswordPage() {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
 
@@ -97,14 +99,14 @@ export default function ResetPasswordPage() {
             </div>
             <h2 className="font-heading text-xl font-bold text-primary">Password updated</h2>
             <p className="mt-3 text-sm text-text-muted">
-              Your password has been reset successfully. You can now sign in with your new password.
+              {t('auth.resetSuccess')}
             </p>
             <Link
               to="/login"
               className="mt-6 inline-flex items-center justify-center gap-2 rounded-lg bg-cta px-5 py-3 font-heading text-sm font-semibold text-white transition-all duration-200 hover:bg-cta/90 focus:outline-none focus:ring-2 focus:ring-cta focus:ring-offset-2"
             >
               <ArrowLeftIcon className="h-4 w-4" aria-hidden="true" />
-              Sign in
+              {t('auth.signIn')}
             </Link>
           </div>
         ) : (
@@ -126,7 +128,7 @@ export default function ResetPasswordPage() {
                   htmlFor="rp-password"
                   className="mb-1.5 block text-sm font-semibold text-text"
                 >
-                  New password
+                  {t('auth.newPassword')}
                 </label>
                 <div className="relative">
                   <LockClosedIcon
@@ -154,7 +156,7 @@ export default function ResetPasswordPage() {
                   htmlFor="rp-confirm"
                   className="mb-1.5 block text-sm font-semibold text-text"
                 >
-                  Confirm password
+                  {t('auth.confirmPassword')}
                 </label>
                 <input
                   id="rp-confirm"
@@ -181,7 +183,7 @@ export default function ResetPasswordPage() {
                     Resetting…
                   </>
                 ) : (
-                  'Reset password'
+                  t('auth.resetPassword')
                 )}
               </button>
             </form>
@@ -190,7 +192,7 @@ export default function ResetPasswordPage() {
 
         {/* Back to sign in */}
         <p className="text-center text-sm text-text-muted">
-          Remember your password?{' '}
+          {t('auth.rememberPassword')}{' '}
           <Link
             to="/login"
             className="font-semibold text-secondary underline-offset-2 transition-colors duration-200 hover:text-secondary/80 hover:underline"

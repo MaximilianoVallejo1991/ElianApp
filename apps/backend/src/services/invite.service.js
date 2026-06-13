@@ -2,6 +2,8 @@ import crypto from 'node:crypto';
 import prisma from '../lib/prisma.js';
 import { AppError } from '../utils/errors.js';
 
+const MAX_GROUP_MEMBERS = 10;
+
 // ---------------------------------------------------------------------------
 //  Invite Service
 // ---------------------------------------------------------------------------
@@ -112,6 +114,21 @@ export async function consumeInviteToken(token, userId) {
 
   if (group.inviteExpires && new Date() > group.inviteExpires) {
     throw new AppError('TOKEN_EXPIRED', 410, 'This invite link has expired');
+  }
+
+  // -- Check member limit ---------------------------------------------------
+  const currentCount = await prisma.groupMember.count({
+    where: {
+      groupId: group.id,
+      status: { in: ['ACTIVE', 'PENDING'] },
+    },
+  });
+  if (currentCount >= MAX_GROUP_MEMBERS) {
+    throw new AppError(
+      'GROUP_FULL',
+      400,
+      `Group has reached the maximum of ${MAX_GROUP_MEMBERS} members.`,
+    );
   }
 
   // Check if the user is already a member of this group
