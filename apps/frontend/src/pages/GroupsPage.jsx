@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   PlusIcon,
   UserGroupIcon,
@@ -9,10 +10,12 @@ import {
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../hooks/useAuth';
 import { groupService } from '../services/api';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 export default function GroupsPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -87,33 +90,34 @@ export default function GroupsPage() {
             <h1
               className="font-heading text-[clamp(2rem,6vw,3.5rem)] font-black leading-none tracking-[-0.05em] text-primary"
             >
-              My Groups
+              {t('nav.myGroups')}
             </h1>
             {user && (
               <p className="mt-2 text-text-muted">
-                Signed in as <span className="font-semibold text-text">{user.nickName || user.email}</span>
+                {t('group.signedInAs')} <span className="font-semibold text-text">{user.nickName || user.email}</span>
               </p>
             )}
           </div>
 
           <div className="flex items-center gap-3">
+            <LanguageSwitcher />
             <button
               type="button"
               onClick={() => setShowCreate(true)}
               className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-primary px-5 py-3 font-heading text-sm font-semibold text-white transition-all duration-200 hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
             >
               <PlusIcon className="h-5 w-5" aria-hidden="true" />
-              New group
+              {t('group.newGroup')}
             </button>
 
             <button
               type="button"
               onClick={handleLogout}
               className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-3 text-sm font-medium text-text-muted transition-colors duration-200 hover:bg-border/50 hover:text-text focus:outline-none focus:ring-2 focus:ring-secondary/30"
-              title="Sign out"
+              title={t('nav.signOut')}
             >
               <ArrowRightOnRectangleIcon className="h-5 w-5" aria-hidden="true" />
-              <span className="hidden sm:inline">Sign out</span>
+              <span className="hidden sm:inline">{t('nav.signOut')}</span>
             </button>
           </div>
         </div>
@@ -147,7 +151,7 @@ export default function GroupsPage() {
         {!loading && !error && groups.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <UserGroupIcon className="mb-4 h-16 w-16 text-border" aria-hidden="true" />
-            <p className="text-lg font-medium text-text-muted">No groups yet</p>
+            <p className="text-lg font-medium text-text-muted">{t('group.noGroups')}</p>
             <p className="mt-1 text-sm text-text-muted/70">
               Create your first group to start splitting expenses with friends.
             </p>
@@ -224,9 +228,9 @@ export default function GroupsPage() {
           aria-label="Create new group"
         >
           <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl">
-            <h2 className="font-heading text-2xl font-bold text-primary">New group</h2>
+            <h2 className="font-heading text-2xl font-bold text-primary">{t('group.newGroup')}</h2>
             <p className="mt-1 text-sm text-text-muted">
-              Create a group to start tracking shared expenses.
+              {t('group.createGroupDescription')}
             </p>
 
             <form onSubmit={handleCreate} className="mt-6 space-y-5">
@@ -334,10 +338,10 @@ export default function GroupsPage() {
                   {createLoading ? (
                     <>
                       <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                      Creating…
+                      {t('group.creating')}
                     </>
                   ) : (
-                    'Create group'
+                    t('group.createGroup')
                   )}
                 </button>
               </div>

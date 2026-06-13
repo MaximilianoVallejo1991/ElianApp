@@ -41,6 +41,7 @@ import ItemReportForm from '../components/ItemReportForm';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EditGroupModal from '../components/EditGroupModal';
 import MemberManagementPanel from '../components/MemberManagementPanel';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 const BALANCE_MODE_LABELS = {
   DYNAMIC: 'Dynamic',
@@ -697,6 +698,7 @@ export default function GroupDetailPage() {
 
             {/* Action buttons */}
             <div className="flex flex-shrink-0 flex-col gap-2 sm:items-end">
+              <LanguageSwitcher />
               {/* Hide Add expense during CLOSING for STATIC groups */}
               {(group.balanceMode !== 'STATIC' || currentPeriod?.status !== 'CLOSING') && (
                 <button
