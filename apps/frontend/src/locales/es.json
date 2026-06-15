@@ -122,7 +122,8 @@
     "settled": "Saldado",
     "youOwe": "Debés",
     "youAreOwed": "Te deben",
-    "everyoneSettled": "Todos están saldados."
+    "everyoneSettled": "Todos están saldados.",
+    "allSettled": "✓ Todos están saldados"
   },
   "member": {
     "title": "Miembros",

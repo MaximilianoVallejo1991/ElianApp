@@ -24,6 +24,7 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   XMarkIcon,
+  ArrowTrendingUpIcon,
 } from '@heroicons/react/24/outline';
 import {
   groupService,
@@ -35,6 +36,7 @@ import {
   periodService,
 } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
+import { computeSettlements } from '../utils/settlements';
 import ExpenseForm from '../components/ExpenseForm';
 import PaymentForm from '../components/PaymentForm';
 import InviteModal from '../components/InviteModal';
@@ -970,7 +972,7 @@ export default function GroupDetailPage() {
           )}
         </section>
 
-        {/* ---- Balances section ---- */}
+        {/* ---- Balances / Settlement section ---- */}
         <section className="mb-4">
           <h2 className="font-heading text-xl font-bold text-primary">{t('group.balances')}</h2>
 
@@ -982,70 +984,76 @@ export default function GroupDetailPage() {
               </p>
             </div>
           ) : (
-            <div className="mt-4 rounded-xl border border-border bg-white">
-              <ul className="divide-y divide-border">
-                {balances.map((b) => {
-                  const isPositive = b.netBalance > 0;
-                  const isNegative = b.netBalance < 0;
-                  const owes = isNegative ? b.owedTo || [] : [];
-                  const owed = isPositive ? b.owedBy || [] : [];
+            <div className="mt-4 space-y-3">
+              {(() => {
+                const settlements = computeSettlements(balances);
+                const allSettled = settlements.length === 0;
 
+                if (allSettled) {
                   return (
-                    <li
-                      key={b.userId}
-                      className="px-5 py-4 first:rounded-t-xl last:rounded-b-xl"
-                    >
-                      {/* User row */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/5">
-                            <UserIcon className="h-4 w-4 text-primary" aria-hidden="true" />
-                          </div>
-                          <span className="text-sm font-semibold text-text">
-                            {b.user?.nickName || b.user?.email || b.userId}
-                          </span>
-                        </div>
-                        <span
-                          className={`text-sm font-semibold ${
-                            isPositive
-                              ? 'text-success'
-                              : isNegative
-                                ? 'text-error'
-                                : 'text-text-muted'
-                          }`}
-                        >
-                          {b.netBalance > 0 ? '+' : ''}
-                          {formatCurrency(b.netBalance, currency)}
-                        </span>
-                      </div>
-
-                      {/* Pairwise debt detail */}
-                      {(owes.length > 0 || owed.length > 0) && (
-                        <div className="mt-2 ml-12 space-y-1">
-                          {owes.map((item) => (
-                            <p key={item.userId} className="text-xs text-error">
-                              {t('balance.owes')}{' '}
-                              <span className="font-semibold">
-                                {item.nickName || item.email || item.userId}
-                              </span>{' '}
-                              {formatCurrency(item.amount, currency)}
-                            </p>
-                          ))}
-                          {owed.map((item) => (
-                            <p key={item.userId} className="text-xs text-success">
-                              {t('balance.isOwed')}{' '}
-                              <span className="font-semibold">
-                                {item.nickName || item.email || item.userId}
-                              </span>{' '}
-                              {formatCurrency(item.amount, currency)}
-                            </p>
-                          ))}
-                        </div>
-                      )}
-                    </li>
+                    <div className="rounded-xl border border-success/20 bg-success/5 px-5 py-6 text-center">
+                      <CheckCircleIcon className="mx-auto h-8 w-8 text-success" aria-hidden="true" />
+                      <p className="mt-2 text-sm font-semibold text-success">
+                        {t('balance.allSettled')}
+                      </p>
+                    </div>
                   );
-                })}
-              </ul>
+                }
+
+                return (
+                  <>
+                    {/* Settlement transactions */}
+                    <div className="rounded-xl border border-border bg-white">
+                      <ul className="divide-y divide-border">
+                        {settlements.map((s, idx) => (
+                          <li key={idx} className="flex items-center justify-between px-5 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-error/10">
+                                <ArrowTrendingUpIcon className="h-4 w-4 text-error rotate-90" aria-hidden="true" />
+                              </div>
+                              <div className="text-sm">
+                                <span className="font-semibold text-error">
+                                  {s.from.nickName || s.from.email}
+                                </span>
+                                <span className="mx-2 text-text-muted">paga</span>
+                                <span className="font-semibold text-success">
+                                  {s.to.nickName || s.to.email}
+                                </span>
+                              </div>
+                            </div>
+                            <span className="text-sm font-semibold text-text">
+                              {formatCurrency(s.amount, currency)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    {/* Summary: who receives what */}
+                    <div className="rounded-xl border border-border bg-white px-5 py-3">
+                      <p className="text-xs text-text-muted mb-2">Saldos netos</p>
+                      <ul className="space-y-1">
+                        {balances.map((b) => {
+                          const isPositive = b.netBalance > 0;
+                          const isNegative = b.netBalance < 0;
+                          return (
+                            <li key={b.userId} className="flex items-center justify-between text-sm">
+                              <span className="font-medium text-text">
+                                {b.user?.nickName || b.user?.email || b.userId}
+                              </span>
+                              <span className={`font-semibold ${
+                                isPositive ? 'text-success' : isNegative ? 'text-error' : 'text-text-muted'
+                              }`}>
+                                {isPositive ? '+' : ''}{formatCurrency(b.netBalance, currency)}
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           )}
         </section>
@@ -1370,11 +1378,12 @@ export default function GroupDetailPage() {
         />
       )}
 
-      {showPaymentForm && (() => {
-        const myBalance = balances.find((b) => b.userId === currentUserId);
-        const hasDebts = myBalance?.netBalance < 0;
+{showPaymentForm && (() => {
+        const settlements = computeSettlements(balances);
+        const mySettlement = settlements.find((s) => s.from.userId === currentUserId);
+        const hasDebts = !!mySettlement;
         const suggestedPayment = hasDebts
-          ? { toUserId: myBalance.owedTo[0]?.userId || '', amount: Math.abs(myBalance.netBalance).toString() }
+          ? { toUserId: mySettlement.to.userId, amount: mySettlement.amount.toString() }
           : {};
 
         return (

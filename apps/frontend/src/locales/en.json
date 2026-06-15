@@ -121,7 +121,8 @@
     "settled": "Settled",
     "youOwe": "You owe",
     "youAreOwed": "You are owed",
-    "everyoneSettled": "Everyone is settled up."
+    "everyoneSettled": "Everyone is settled up.",
+    "allSettled": "✓ All settled up"
   },
   "member": {
     "title": "Members",
