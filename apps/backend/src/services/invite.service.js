@@ -168,14 +168,15 @@ export async function consumeInviteToken(token, userId) {
     });
   }
 
-  // Clear the invite token so it can't be reused
-  await prisma.group.update({
-    where: { id: group.id },
-    data: {
-      inviteToken: null,
-      inviteExpires: null,
-    },
-  });
+  // Token stays active for 7 days — multiple users can join with the same link
+  // Cleanup of expired tokens happens on server startup
+  // await prisma.group.update({
+  //   where: { id: group.id },
+  //   data: {
+  //     inviteToken: null,
+  //     inviteExpires: null,
+  //   },
+  // });
 
   return {
     groupId: group.id,
