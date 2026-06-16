@@ -135,7 +135,10 @@
     "completed": "Completed",
     "locked": "Locked",
     "loadMore": "Load more expenses",
-    "untitled": "Untitled expense"
+    "untitled": "Untitled expense",
+    "reported": "Reported",
+    "reportedItems": "Reported items",
+    "unlockString": "Unlock for editing"
   },
   "payment": {
     "title": "Payments",

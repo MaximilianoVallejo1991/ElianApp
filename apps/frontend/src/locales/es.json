@@ -136,7 +136,10 @@
     "completed": "Completado",
     "locked": "Bloqueado",
     "loadMore": "Cargar más gastos",
-    "untitled": "Gasto sin título"
+    "untitled": "Gasto sin título",
+    "reported": "Reportado",
+    "reportedItems": "Items Reportados",
+    "unlockString": "Desbloquea para Editar"
   },
   "payment": {
     "title": "Pagos",

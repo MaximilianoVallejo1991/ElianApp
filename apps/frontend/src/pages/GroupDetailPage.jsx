@@ -547,8 +547,8 @@ export default function GroupDetailPage() {
           <p className="mt-2 text-sm text-text-muted">
             {group.balanceMode === 'STATIC' && currentPeriod?.status !== 'CLOSING' && (
               currentPeriod?.status === 'OPEN' ? t('group.noPaymentsOpen')
-              : currentPeriod?.status === 'CLOSED' ? t('group.noPaymentsClosed')
-              : t('group.noPaymentsFinal')
+                : currentPeriod?.status === 'CLOSED' ? t('group.noPaymentsClosed')
+                  : t('group.noPaymentsFinal')
             )}
             {(group.balanceMode !== 'STATIC' || currentPeriod?.status === 'CLOSING') && (
               t('group.noPaymentsClosing')
@@ -570,76 +570,76 @@ export default function GroupDetailPage() {
               const isRejected = payment.status === 'REJECTED';
 
               return (
-              <li
-                key={payment.id}
-                className="flex items-center justify-between px-5 py-4 first:rounded-t-xl last:rounded-b-xl"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-cta/10">
-                    <ArrowPathIcon className="h-4 w-4 text-cta" aria-hidden="true" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm text-text">
-                      <span className="font-semibold">
-                        {payment.fromUser?.nickName || payment.fromUser?.email || 'Unknown'}
-                      </span>
-                      {' → '}
-                      <span className="font-semibold">
-                        {payment.toUser?.nickName || payment.toUser?.email || 'Unknown'}
-                      </span>
-                    </p>
-                    <p className="text-xs text-text-muted">
-                      {formatDate(payment.paidAt)}
-                      {payment.method ? ` · ${payment.method}` : ''}
-                      {isClosing && (
-                        <span className="ml-2">
-                          {isPending && <span className="text-warning">· {t('payment.pending')}</span>}
-                          {isAccepted && <span className="text-success">· {t('payment.accepted')}</span>}
-                          {isRejected && <span className="text-error">· {t('payment.rejected')}</span>}
+                <li
+                  key={payment.id}
+                  className="flex items-center justify-between px-5 py-4 first:rounded-t-xl last:rounded-b-xl"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-cta/10">
+                      <ArrowPathIcon className="h-4 w-4 text-cta" aria-hidden="true" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm text-text">
+                        <span className="font-semibold">
+                          {payment.fromUser?.nickName || payment.fromUser?.email || 'Unknown'}
                         </span>
-                      )}
-                    </p>
+                        {' → '}
+                        <span className="font-semibold">
+                          {payment.toUser?.nickName || payment.toUser?.email || 'Unknown'}
+                        </span>
+                      </p>
+                      <p className="text-xs text-text-muted">
+                        {formatDate(payment.paidAt)}
+                        {payment.method ? ` · ${payment.method}` : ''}
+                        {isClosing && (
+                          <span className="ml-2">
+                            {isPending && <span className="text-warning">· {t('payment.pending')}</span>}
+                            {isAccepted && <span className="text-success">· {t('payment.accepted')}</span>}
+                            {isRejected && <span className="text-error">· {t('payment.rejected')}</span>}
+                          </span>
+                        )}
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <div className="flex flex-shrink-0 items-center gap-2">
-                  <span className="font-heading text-sm font-bold text-cta">
-                    {formatCurrency(payment.amount, currency)}
-                  </span>
-                  {isClosing && isReceiver && isPending && (
-                    <>
+                  <div className="flex flex-shrink-0 items-center gap-2">
+                    <span className="font-heading text-sm font-bold text-cta">
+                      {formatCurrency(payment.amount, currency)}
+                    </span>
+                    {isClosing && isReceiver && isPending && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleAcceptPayment(payment.id)}
+                          className="cursor-pointer rounded p-1 text-success transition-colors duration-200 hover:bg-success/10 focus:outline-none focus:ring-2 focus:ring-success/30"
+                          aria-label="Accept payment"
+                        >
+                          <CheckCircleIcon className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRejectingPaymentId(payment.id);
+                            setRejectReason('');
+                          }}
+                          className="cursor-pointer rounded p-1 text-error transition-colors duration-200 hover:bg-error/10 focus:outline-none focus:ring-2 focus:ring-error/30"
+                          aria-label="Reject payment"
+                        >
+                          <XMarkIcon className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      </>
+                    )}
+                    {canDeletePayment && !isClosing && (
                       <button
                         type="button"
-                        onClick={() => handleAcceptPayment(payment.id)}
-                        className="cursor-pointer rounded p-1 text-success transition-colors duration-200 hover:bg-success/10 focus:outline-none focus:ring-2 focus:ring-success/30"
-                        aria-label="Accept payment"
+                        onClick={() => setDeletingPaymentId(payment.id)}
+                        className="cursor-pointer rounded p-1 text-text-muted transition-colors duration-200 hover:bg-error/10 hover:text-error focus:outline-none focus:ring-2 focus:ring-error/30"
+                        aria-label="Delete payment"
                       >
-                        <CheckCircleIcon className="h-4 w-4" aria-hidden="true" />
+                        <TrashIcon className="h-4 w-4" aria-hidden="true" />
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setRejectingPaymentId(payment.id);
-                          setRejectReason('');
-                        }}
-                        className="cursor-pointer rounded p-1 text-error transition-colors duration-200 hover:bg-error/10 focus:outline-none focus:ring-2 focus:ring-error/30"
-                        aria-label="Reject payment"
-                      >
-                        <XMarkIcon className="h-4 w-4" aria-hidden="true" />
-                      </button>
-                    </>
-                  )}
-                  {canDeletePayment && !isClosing && (
-                    <button
-                      type="button"
-                      onClick={() => setDeletingPaymentId(payment.id)}
-                      className="cursor-pointer rounded p-1 text-text-muted transition-colors duration-200 hover:bg-error/10 hover:text-error focus:outline-none focus:ring-2 focus:ring-error/30"
-                      aria-label="Delete payment"
-                    >
-                      <TrashIcon className="h-4 w-4" aria-hidden="true" />
-                    </button>
-                  )}
-                </div>
-              </li>
+                    )}
+                  </div>
+                </li>
               );
             })}
           </ul>
@@ -656,7 +656,7 @@ export default function GroupDetailPage() {
             </button>
           </div>
         )}
-        </>
+      </>
       )}
     </section>
   );
@@ -843,15 +843,14 @@ export default function GroupDetailPage() {
                 <span className="truncate text-sm font-semibold text-text">{t('settlement.period')}</span>
               </div>
               <span
-                className={`inline-block flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
-                  currentPeriod.status === 'OPEN'
-                    ? 'bg-success/10 text-success'
-                    : currentPeriod.status === 'CLOSING'
-                      ? 'bg-warning/10 text-warning'
-                      : currentPeriod.status === 'CLOSED'
-                        ? 'bg-border/30 text-text-muted'
-                        : 'bg-error/10 text-error'
-                }`}
+                className={`inline-block flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${currentPeriod.status === 'OPEN'
+                  ? 'bg-success/10 text-success'
+                  : currentPeriod.status === 'CLOSING'
+                    ? 'bg-warning/10 text-warning'
+                    : currentPeriod.status === 'CLOSED'
+                      ? 'bg-border/30 text-text-muted'
+                      : 'bg-error/10 text-error'
+                  }`}
               >
                 {t(`settlement.status${currentPeriod.status}`)}
               </span>
@@ -890,24 +889,24 @@ export default function GroupDetailPage() {
             )}
 
             {/* Status messages for CLOSING period (shown to all) */}
-              {currentPeriod.status === 'CLOSING' && (
-                <div className="mt-2 text-xs">
-                  {payments.length === 0 && (
-                    <p className="text-text-muted">{t('group.noPayments')}</p>
-                  )}
-                  {pendingPayments.length > 0 && (
-                    <p className="text-warning">
-                      {t('payment.paymentsWaiting', { count: pendingPayments.length })}
-                    </p>
-                  )}
-                  {pendingPayments.length === 0 && !allBalancesZero && (
-                    <p className="text-error">{t('payment.balancesNotSettled')}</p>
-                  )}
-                  {pendingPayments.length === 0 && allBalancesZero && acceptedPayments.length === 0 && (
-                    <p className="text-text-muted">{t('payment.noPaymentsNeeded')}</p>
-                  )}
-                </div>
-              )}
+            {currentPeriod.status === 'CLOSING' && (
+              <div className="mt-2 text-xs">
+                {payments.length === 0 && (
+                  <p className="text-text-muted">{t('group.noPayments')}</p>
+                )}
+                {pendingPayments.length > 0 && (
+                  <p className="text-warning">
+                    {t('payment.paymentsWaiting', { count: pendingPayments.length })}
+                  </p>
+                )}
+                {pendingPayments.length === 0 && !allBalancesZero && (
+                  <p className="text-error">{t('payment.balancesNotSettled')}</p>
+                )}
+                {pendingPayments.length === 0 && allBalancesZero && acceptedPayments.length === 0 && (
+                  <p className="text-text-muted">{t('payment.noPaymentsNeeded')}</p>
+                )}
+              </div>
+            )}
 
             {/* Closure error */}
             {closureError && (
@@ -1041,9 +1040,8 @@ export default function GroupDetailPage() {
                               <span className="font-medium text-text">
                                 {b.user?.nickName || b.user?.email || b.userId}
                               </span>
-                              <span className={`font-semibold ${
-                                isPositive ? 'text-success' : isNegative ? 'text-error' : 'text-text-muted'
-                              }`}>
+                              <span className={`font-semibold ${isPositive ? 'text-success' : isNegative ? 'text-error' : 'text-text-muted'
+                                }`}>
                                 {isPositive ? '+' : ''}{formatCurrency(b.netBalance, currency)}
                               </span>
                             </li>
@@ -1175,14 +1173,14 @@ export default function GroupDetailPage() {
                     {isCollective && (
                       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-muted">
                         <span>
-                          Shared costs:{' '}
+                          {t("expense.sharedCosts")}:{' '}
                           <span className="font-semibold text-text">
                             {formatCurrency(expense.sharedCosts, currency)}
                           </span>
                         </span>
                         <span>
                           {expenseItems.length}/{expense.participantIds?.length || 0}{' '}
-                          reported
+                          {t("expense.reported")}
                         </span>
                       </div>
                     )}
@@ -1203,7 +1201,7 @@ export default function GroupDetailPage() {
                           className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-cta bg-cta/5 px-3 py-1.5 text-xs font-semibold text-cta transition-all duration-200 hover:bg-cta/10 focus:outline-none focus:ring-2 focus:ring-cta/30"
                         >
                           <LockOpenIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                          Unlock for editing
+                          {t("expense.unlockString")}
                         </button>
                       </div>
                     )}
@@ -1269,7 +1267,7 @@ export default function GroupDetailPage() {
                     {isCollective && expenseItems.length > 0 && (
                       <div className="mt-3 border-t border-border pt-3">
                         <p className="mb-2 text-xs font-medium text-text-muted uppercase tracking-wider">
-                          Reported items
+                          {t("expense.reportedItems")}
                         </p>
                         <ul className="space-y-2">
                           {expenseItems.map((item) => (
@@ -1353,7 +1351,7 @@ export default function GroupDetailPage() {
                 </button>
               </div>
             )}
-            </>
+          </>
           )}
         </section>
 
@@ -1378,7 +1376,7 @@ export default function GroupDetailPage() {
         />
       )}
 
-{showPaymentForm && (() => {
+      {showPaymentForm && (() => {
         const settlements = computeSettlements(balances);
         const mySettlement = settlements.find((s) => s.from.userId === currentUserId);
         const hasDebts = !!mySettlement;
@@ -1554,7 +1552,8 @@ export default function GroupDetailPage() {
 
       {/* Period history (STATIC groups) */}
       {group.balanceMode === 'STATIC' && periodHistory.length > 0 && (
-        <div className="mt-8 rounded-xl border border-border bg-white">
+        <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+          <div className="mt-8 rounded-xl border border-border bg-white">
           <button
             type="button"
             onClick={() => setShowClosureHistory(!showClosureHistory)}
@@ -1594,11 +1593,10 @@ export default function GroupDetailPage() {
                             {t('settlement.periodStarted', { date: formatDate(period.startedAt) })}
                           </span>
                           <span
-                            className={`ml-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
-                              period.status === 'CLOSED'
-                                ? 'bg-border/30 text-text-muted'
-                                : 'bg-error/10 text-error'
-                            }`}
+                            className={`ml-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${period.status === 'CLOSED'
+                              ? 'bg-border/30 text-text-muted'
+                              : 'bg-error/10 text-error'
+                              }`}
                           >
                             {period.status === 'CLOSED' ? t('settlement.partial') : t('settlement.finalBadge')}
                           </span>
@@ -1627,7 +1625,10 @@ export default function GroupDetailPage() {
                           <div className="mb-4">
                             <h4 className="text-xs font-semibold uppercase tracking-wider text-text-muted">{t('group.expenses')}</h4>
                             {pExpenses.length === 0 ? (
-                              <p className="mt-2 text-sm text-text-muted">{t('settlement.noExpenses')}</p>
+                              <div className="mt-2 flex items-center gap-2 text-sm text-text-muted">
+                                <ShoppingCartIcon className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
+                                <span>{t('settlement.noExpenses')}</span>
+                              </div>
                             ) : (
                               <ul className="mt-2 space-y-2">
                                 {pExpenses.map((exp) => (
@@ -1651,7 +1652,10 @@ export default function GroupDetailPage() {
                           <div className="mb-4">
                             <h4 className="text-xs font-semibold uppercase tracking-wider text-text-muted">{t('group.payments')}</h4>
                             {pPayments.length === 0 ? (
-                              <p className="mt-2 text-sm text-text-muted">{t('settlement.noPayments')}</p>
+                              <div className="mt-2 flex items-center gap-2 text-sm text-text-muted">
+                                <BanknotesIcon className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
+                                <span>{t('settlement.noPayments')}</span>
+                              </div>
                             ) : (
                               <ul className="mt-2 space-y-2">
                                 {pPayments.map((pay) => (
@@ -1659,8 +1663,8 @@ export default function GroupDetailPage() {
                                     <div>
                                       <span className="font-medium text-text">
                                         {pay.fromUser?.nickName || pay.fromUser?.email || t('common.unknown')}
-                                      {' → '}
-                                      {pay.toUser?.nickName || pay.toUser?.email || t('common.unknown')}
+                                        {' → '}
+                                        {pay.toUser?.nickName || pay.toUser?.email || t('common.unknown')}
                                       </span>
                                       <span className="ml-2 text-xs text-text-muted">
                                         {pay.status === 'ACCEPTED' ? t('payment.accepted') : pay.status === 'PENDING' ? t('payment.pending') : t('payment.rejected')}
@@ -1687,13 +1691,17 @@ export default function GroupDetailPage() {
                                       <div className="flex items-center justify-between">
                                         <span className="text-sm font-medium text-text">{b.user?.nickName || b.userId}</span>
                                         <span className="text-xs text-text-muted">
+                                          <CurrencyDollarIcon className="inline h-3.5 w-3.5 mr-1 text-text-muted" aria-hidden="true" />
                                           {t('settlement.totalSpent')} <span className="font-semibold text-text">{formatCurrency(b.totalSpent, currency)}</span>
                                         </span>
                                       </div>
 
                                       {/* Owed at closure */}
                                       <div className="mt-2 border-t border-border pt-2">
-                                        <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">{t('settlement.owedAtClosure')}</span>
+                                        <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                                        <BanknotesIcon className="inline h-3 w-3 mr-1" aria-hidden="true" />
+                                        {t('settlement.owedAtClosure')}
+                                      </span>
                                         {b.owedTo.length > 0 && (
                                           <div className="mt-1">
                                             {b.owedTo.map((debt) => (
@@ -1719,7 +1727,10 @@ export default function GroupDetailPage() {
 
                                       {/* After payments */}
                                       <div className="mt-2 border-t border-border pt-2">
-                                        <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">{t('settlement.afterPayments')}</span>
+                                        <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                                        <CheckCircleIcon className="inline h-3 w-3 mr-1" aria-hidden="true" />
+                                        {t('settlement.afterPayments')}
+                                      </span>
                                         {isSettled ? (
                                           <p className="mt-1 text-xs font-semibold text-success">
                                             <CheckCircleIcon className="inline h-3 w-3" aria-hidden="true" />
@@ -1735,8 +1746,8 @@ export default function GroupDetailPage() {
                                   );
                                 })}
                               </ul>
-                            </div>
-                          )}
+        </div>
+      )}
                         </div>
                       )}
                     </li>
@@ -1746,9 +1757,10 @@ export default function GroupDetailPage() {
             </div>
           )}
         </div>
+        </div>
       )}
     </div>
   );
 }
 
-      
+
