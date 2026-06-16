@@ -161,7 +161,7 @@
   "balance": {
     "title": "Balances",
     "owes": "owes",
-    "isOwed": "is owed",
+    "isOwed": "is owed by",
     "settled": "Settled",
     "youOwe": "You owe",
     "youAreOwed": "You are owed",
@@ -208,7 +208,23 @@
     "closing": "Closing — recording payments, awaiting acceptance",
     "closed": "Closed period — no further changes",
     "final": "Final — group is permanently closed",
-    "startConfirm": "Freeze expenses and begin the settlement period. Members will need to record payments to settle their debts before closure completes."
+    "startConfirm": "Freeze expenses and begin the settlement period. Members will need to record payments to settle their debts before closure completes.",
+    "history": "Settlement History ({{count}})",
+    "periodStarted": "Period started {{date}}",
+    "partial": "Partial",
+    "finalBadge": "Final",
+    "expenseCount": "{{count}} expenses",
+    "paymentCount": "{{count}} payments",
+    "closedDate": "Closed {{date}}",
+    "noExpenses": "No expenses in this period.",
+    "noPayments": "No payments in this period.",
+    "summary": "Settlement Summary",
+    "totalSpent": "Total spent:",
+    "owedAtClosure": "Owed at closure",
+    "noDebts": "No debts",
+    "afterPayments": "After payments",
+    "allSettled": "All debts settled",
+    "remaining": "Remaining:"
   },
   "auth": {
     "signIn": "Sign in",

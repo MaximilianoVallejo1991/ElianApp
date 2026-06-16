@@ -1563,7 +1563,7 @@ export default function GroupDetailPage() {
             <div className="flex items-center gap-3">
               <ArchiveBoxIcon className="h-5 w-5 text-text-muted" aria-hidden="true" />
               <span className="font-heading text-sm font-semibold text-text">
-                Settlement History ({periodHistory.length})
+                {t('settlement.history', { count: periodHistory.length })}
               </span>
             </div>
             {showClosureHistory ? (
@@ -1591,7 +1591,7 @@ export default function GroupDetailPage() {
                       >
                         <div>
                           <span className="text-sm font-medium text-text">
-                            Period started {formatDate(period.startedAt)}
+                            {t('settlement.periodStarted', { date: formatDate(period.startedAt) })}
                           </span>
                           <span
                             className={`ml-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
@@ -1600,16 +1600,16 @@ export default function GroupDetailPage() {
                                 : 'bg-error/10 text-error'
                             }`}
                           >
-                            {period.status === 'CLOSED' ? 'Partial' : 'Final'}
+                            {period.status === 'CLOSED' ? t('settlement.partial') : t('settlement.finalBadge')}
                           </span>
                           <span className="ml-3 text-xs text-text-muted">
-                            {period._count?.expenses || 0} expenses · {period._count?.payments || 0} payments
+                            {t('settlement.expenseCount', { count: period._count?.expenses || 0 })} · {t('settlement.paymentCount', { count: period._count?.payments || 0 })}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
                           {period.closedAt && (
                             <span className="text-xs text-text-muted">
-                              Closed {formatDate(period.closedAt)}
+                              {t('settlement.closedDate', { date: formatDate(period.closedAt) })}
                             </span>
                           )}
                           {isExpanded ? (
@@ -1627,7 +1627,7 @@ export default function GroupDetailPage() {
                           <div className="mb-4">
                             <h4 className="text-xs font-semibold uppercase tracking-wider text-text-muted">{t('group.expenses')}</h4>
                             {pExpenses.length === 0 ? (
-                              <p className="mt-2 text-sm text-text-muted">No expenses in this period.</p>
+                              <p className="mt-2 text-sm text-text-muted">{t('settlement.noExpenses')}</p>
                             ) : (
                               <ul className="mt-2 space-y-2">
                                 {pExpenses.map((exp) => (
@@ -1651,19 +1651,19 @@ export default function GroupDetailPage() {
                           <div className="mb-4">
                             <h4 className="text-xs font-semibold uppercase tracking-wider text-text-muted">{t('group.payments')}</h4>
                             {pPayments.length === 0 ? (
-                              <p className="mt-2 text-sm text-text-muted">No payments in this period.</p>
+                              <p className="mt-2 text-sm text-text-muted">{t('settlement.noPayments')}</p>
                             ) : (
                               <ul className="mt-2 space-y-2">
                                 {pPayments.map((pay) => (
                                   <li key={pay.id} className="flex items-center justify-between rounded-lg border border-border bg-white px-3 py-2 text-sm">
                                     <div>
                                       <span className="font-medium text-text">
-                                        {pay.fromUser?.nickName || pay.fromUser?.email || 'Unknown'}
-                                        {' → '}
-                                        {pay.toUser?.nickName || pay.toUser?.email || 'Unknown'}
+                                        {pay.fromUser?.nickName || pay.fromUser?.email || t('common.unknown')}
+                                      {' → '}
+                                      {pay.toUser?.nickName || pay.toUser?.email || t('common.unknown')}
                                       </span>
                                       <span className="ml-2 text-xs text-text-muted">
-                                        {pay.status === 'ACCEPTED' ? t('payment.accepted') : pay.status}
+                                        {pay.status === 'ACCEPTED' ? t('payment.accepted') : pay.status === 'PENDING' ? t('payment.pending') : t('payment.rejected')}
                                       </span>
                                     </div>
                                     <span className="font-semibold text-cta">
@@ -1678,7 +1678,7 @@ export default function GroupDetailPage() {
                           {/* Settlement summary */}
                           {pBalances.length > 0 && (
                             <div>
-                              <h4 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Settlement Summary</h4>
+                              <h4 className="text-xs font-semibold uppercase tracking-wider text-text-muted">{t('settlement.summary')}</h4>
                               <ul className="mt-2 space-y-3">
                                 {pBalances.map((b) => {
                                   const isSettled = b.finalBalance === 0;
@@ -1687,13 +1687,13 @@ export default function GroupDetailPage() {
                                       <div className="flex items-center justify-between">
                                         <span className="text-sm font-medium text-text">{b.user?.nickName || b.userId}</span>
                                         <span className="text-xs text-text-muted">
-                                          Total spent: <span className="font-semibold text-text">{formatCurrency(b.totalSpent, currency)}</span>
+                                          {t('settlement.totalSpent')} <span className="font-semibold text-text">{formatCurrency(b.totalSpent, currency)}</span>
                                         </span>
                                       </div>
 
                                       {/* Owed at closure */}
                                       <div className="mt-2 border-t border-border pt-2">
-                                        <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Owed at closure</span>
+                                        <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">{t('settlement.owedAtClosure')}</span>
                                         {b.owedTo.length > 0 && (
                                           <div className="mt-1">
                                             {b.owedTo.map((debt) => (
@@ -1713,21 +1713,21 @@ export default function GroupDetailPage() {
                                           </div>
                                         )}
                                         {b.owedTo.length === 0 && b.owedBy.length === 0 && (
-                                          <p className="text-xs text-text-muted">No debts</p>
+                                          <p className="text-xs text-text-muted">{t('settlement.noDebts')}</p>
                                         )}
                                       </div>
 
                                       {/* After payments */}
                                       <div className="mt-2 border-t border-border pt-2">
-                                        <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">After payments</span>
+                                        <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">{t('settlement.afterPayments')}</span>
                                         {isSettled ? (
                                           <p className="mt-1 text-xs font-semibold text-success">
                                             <CheckCircleIcon className="inline h-3 w-3" aria-hidden="true" />
-                                            {' '}All debts settled
+                                            {' '}{t('settlement.allSettled')}
                                           </p>
                                         ) : (
                                           <p className="mt-1 text-xs text-error">
-                                            Remaining: {b.finalBalance > 0 ? '+' : ''}{formatCurrency(b.finalBalance, currency)}
+                                            {t('settlement.remaining')} {b.finalBalance > 0 ? '+' : ''}{formatCurrency(b.finalBalance, currency)}
                                           </p>
                                         )}
                                       </div>
