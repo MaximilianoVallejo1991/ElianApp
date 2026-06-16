@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { groupService } from '../services/api';
 
@@ -12,7 +13,11 @@ import { groupService } from '../services/api';
  *   onSuccess  — callback after successful update
  *   onClose    — callback to close modal
  */
+
+const CURRENCIES = ['USD', 'EUR', 'GBP', 'MXN', 'COP', 'ARS', 'CLP'];
+
 export default function EditGroupModal({ group, onSuccess, onClose }) {
+  const { t } = useTranslation();
   const [name, setName] = useState(group.name || '');
   const [currency, setCurrency] = useState(group.currency || 'USD');
   const [loading, setLoading] = useState(false);
@@ -23,7 +28,7 @@ export default function EditGroupModal({ group, onSuccess, onClose }) {
     setError('');
 
     if (!name.trim()) {
-      setError('Group name is required.');
+      setError(t('editGroup.groupNameRequired'));
       return;
     }
 
@@ -36,7 +41,7 @@ export default function EditGroupModal({ group, onSuccess, onClose }) {
       onSuccess?.();
       onClose?.();
     } catch (err) {
-      setError(err.message || 'Failed to update group.');
+      setError(err.message || t('editGroup.failedUpdate'));
     } finally {
       setLoading(false);
     }
@@ -47,7 +52,7 @@ export default function EditGroupModal({ group, onSuccess, onClose }) {
       className="fixed inset-0 z-50 flex items-center justify-center bg-primary/40 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
-      aria-label="Edit group"
+      aria-label={t('editGroup.title')}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose?.();
       }}
@@ -56,13 +61,13 @@ export default function EditGroupModal({ group, onSuccess, onClose }) {
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
           <h2 className="font-heading text-lg font-bold text-primary">
-            Edit group
+            {t('editGroup.title')}
           </h2>
           <button
             type="button"
             onClick={onClose}
             className="cursor-pointer rounded-lg p-1.5 text-text-muted transition-colors duration-200 hover:bg-border/50 hover:text-text focus:outline-none focus:ring-2 focus:ring-secondary/30"
-            aria-label="Close"
+            aria-label={t('common.close')}
           >
             <XMarkIcon className="h-5 w-5" aria-hidden="true" />
           </button>
@@ -82,7 +87,7 @@ export default function EditGroupModal({ group, onSuccess, onClose }) {
           {/* Name */}
           <div>
             <label htmlFor="edit-group-name" className="mb-1.5 block text-sm font-semibold text-text">
-              Group name
+              {t('group.groupName')}
             </label>
             <input
               id="edit-group-name"
@@ -91,7 +96,7 @@ export default function EditGroupModal({ group, onSuccess, onClose }) {
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Weekend trip"
+              placeholder={t('group.groupNamePlaceholder')}
               className="w-full rounded-lg border border-border bg-white px-4 py-3 text-text transition-colors duration-200 placeholder:text-text-muted/50 focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary/20"
             />
           </div>
@@ -99,7 +104,7 @@ export default function EditGroupModal({ group, onSuccess, onClose }) {
           {/* Currency */}
           <div>
             <label htmlFor="edit-group-currency" className="mb-1.5 block text-sm font-semibold text-text">
-              Currency
+              {t('group.currency')}
             </label>
             <select
               id="edit-group-currency"
@@ -107,13 +112,11 @@ export default function EditGroupModal({ group, onSuccess, onClose }) {
               onChange={(e) => setCurrency(e.target.value)}
               className="w-full cursor-pointer rounded-lg border border-border bg-white px-4 py-3 text-text transition-colors duration-200 focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary/20"
             >
-              <option value="USD">USD — US Dollar</option>
-              <option value="EUR">EUR — Euro</option>
-              <option value="GBP">GBP — British Pound</option>
-              <option value="MXN">MXN — Mexican Peso</option>
-              <option value="COP">COP — Colombian Peso</option>
-              <option value="ARS">ARS — Argentine Peso</option>
-              <option value="CLP">CLP — Chilean Peso</option>
+              {CURRENCIES.map((code) => (
+                <option key={code} value={code}>
+                  {code} — {t(`currency.${code}`)}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -124,7 +127,7 @@ export default function EditGroupModal({ group, onSuccess, onClose }) {
               onClick={onClose}
               className="flex-1 cursor-pointer rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-text-muted transition-colors duration-200 hover:bg-border/30 focus:outline-none focus:ring-2 focus:ring-secondary/30"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
@@ -134,10 +137,10 @@ export default function EditGroupModal({ group, onSuccess, onClose }) {
               {loading ? (
                 <>
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Saving…
+                  {t('editGroup.saving')}
                 </>
               ) : (
-                'Save changes'
+                t('editGroup.saveChanges')
               )}
             </button>
           </div>

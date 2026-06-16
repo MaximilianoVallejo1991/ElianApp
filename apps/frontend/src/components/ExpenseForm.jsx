@@ -8,7 +8,7 @@ import { NumericFormat } from 'react-number-format';
 import { useTranslation } from 'react-i18next';
 import { expenseService } from '../services/api';
 
-const CATEGORIES = ['FOOD', 'TRANSPORT', 'HOUSING', 'ENTERTAINMENT', 'OTHER'];
+const CATEGORIES = ['FOOD', 'DRINKS', 'TRANSPORT', 'HOUSING', 'ENTERTAINMENT', 'GIFTS', 'OTHER'];
 
 const SPLIT_TYPES = [
   { value: 'EQUAL', label: 'Equal' },
@@ -187,31 +187,31 @@ export default function ExpenseForm({
   const validateStep1 = () => {
     if (!description.trim()) return 'Description is required.';
     if (!amount || parsedAmount <= 0) return 'Amount must be a positive number.';
-    if (!payerId) return 'Please select a payer.';
+    if (!payerId) return t('expense.selectPayer');
     return null;
   };
 
 const validateStep2 = () => {
     if (splitType === 'EQUAL') {
-      if (selectedParticipantIds.length === 0) return 'Select at least one participant.';
+      if (selectedParticipantIds.length === 0) return t('expense.noParticipants');
       return null;
     }
 
     if (splitType === 'PERCENTAGE') {
-      if (selectedParticipantIds.length === 0) return 'Select at least one participant.';
+      if (selectedParticipantIds.length === 0) return t('expense.noParticipants');
       if (Math.abs(percentageSum - 100) > 0.009) {
-        return 'Split percentages must sum to 100%.';
+        return t('expense.percentageSumError');
       }
       if (splits.some((s) => !s.percentage || parseFloat(s.percentage) <= 0)) {
-        return 'Each participant must have a positive percentage.';
+        return t('expense.percentagePositive');
       }
     }
 
     if (splitType === 'COLLECTIVE' && collSubStep === 'configure') {
       const shared = parseFloat(sharedCosts) || 0;
-      if (shared < 0) return 'Shared costs cannot be negative.';
-      if (shared > parsedAmount) return 'Shared costs cannot exceed the total.';
-      if (selectedParticipantIds.length === 0) return 'Select at least one participant.';
+      if (shared < 0) return t('expense.sharedCostsNegative');
+      if (shared > parsedAmount) return t('expense.sharedCostsExceedTotal');
+      if (selectedParticipantIds.length === 0) return t('expense.noParticipants');
       return null;
     }
 
@@ -553,13 +553,13 @@ const validateStep2 = () => {
               {(splitType === 'EQUAL' || splitType === 'PERCENTAGE') && (
                 <div className="rounded-lg border border-border bg-background p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold text-text">Participants</p>
+                    <p className="text-sm font-semibold text-text">{t('expense.participants')}</p>
                     <button
                       type="button"
                       onClick={toggleAllCollectiveParticipants}
                       className="cursor-pointer rounded px-1.5 py-0.5 text-xs font-medium text-secondary transition-colors duration-200 hover:text-secondary/80 focus:outline-none focus:ring-2 focus:ring-secondary/30"
                     >
-                      {selectedParticipantIds.length === members.length ? 'Deselect all' : 'Select all'}
+                      {selectedParticipantIds.length === members.length ? t('expense.deselectAll') : t('expense.selectAll')}
                     </button>
                   </div>
                   <div className="max-h-48 space-y-1 overflow-y-auto">
@@ -582,7 +582,7 @@ const validateStep2 = () => {
                             {memberName(m)}
                       {m.userId === currentUserId ? ` (${t('common.you')})` : ''}
                       {m.isFrozen && (
-                        <span className="ml-1.5 inline-block text-blue-500" title="This member is frozen and cannot create expenses">
+                        <span className="ml-1.5 inline-block text-blue-500" title={t('member.freezeTitle')}>
                           ❄️
                         </span>
                       )}
@@ -593,7 +593,7 @@ const validateStep2 = () => {
             </div>
             {selectedParticipantIds.length > 0 && (
               <p className="text-xs text-text-muted">
-                {selectedParticipantIds.length} participant{selectedParticipantIds.length !== 1 ? 's' : ''} selected
+                {t('expense.participantsSelected', { count: selectedParticipantIds.length })}
                     </p>
                   )}
                 </div>
@@ -603,12 +603,10 @@ const validateStep2 = () => {
               {splitType === 'EQUAL' && parsedAmount > 0 && selectedParticipantIds.length > 0 && (
                 <div className="rounded-lg bg-secondary/5 px-4 py-3">
                   <p className="text-sm text-text">
-                    Split equally among{' '}
-                    <span className="font-semibold text-secondary">{selectedParticipantIds.length}</span>{' '}
-                    participant{selectedParticipantIds.length !== 1 ? 's' : ''}
+                    {t('expense.splitEquallyAmong', { count: selectedParticipantIds.length })}
                   </p>
                   <p className="mt-1 text-sm font-semibold text-primary">
-                    {formatCurrency(equalShare)} each
+                    {formatCurrency(equalShare)} {t('expense.each')}
                   </p>
                 </div>
               )}
@@ -617,7 +615,7 @@ const validateStep2 = () => {
               {splitType === 'PERCENTAGE' && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold text-text">Percentage per member</p>
+                    <p className="text-sm font-semibold text-text">{t('expense.percentagePerMember')}</p>
                     <p
                       className={`text-xs font-medium ${
                         Math.abs(percentageSum - 100) <= 0.009
@@ -685,9 +683,9 @@ const validateStep2 = () => {
                     <>
                       {/* Shared costs */}
                       <div className="rounded-lg border border-border bg-background p-4 space-y-3">
-                        <p className="text-sm font-semibold text-text">Shared costs</p>
+                        <p className="text-sm font-semibold text-text">{t('expense.sharedCosts')}</p>
                         <p className="text-xs text-text-muted">
-                          Costs shared equally among all participants (delivery, tips, taxes, etc.). Can be 0.
+                          {t('expense.sharedCostsDescription')}
                         </p>
                         <div className="relative">
                           <CurrencyDollarIcon
@@ -713,8 +711,8 @@ const validateStep2 = () => {
                             <p className="text-xs text-text">
                               <span className="font-semibold text-secondary">
                                 {formatCurrency(Math.round((parseFloat(sharedCosts) / selectedParticipantIds.length) * 100) / 100)}
-                              </span>{' '}
-                              per person
+                              </span>                              {' '}
+                              {t('expense.perPerson')}
                             </p>
                           </div>
                         )}
@@ -723,13 +721,13 @@ const validateStep2 = () => {
                       {/* Participants */}
                       <div className="rounded-lg border border-border bg-background p-4 space-y-3">
                         <div className="flex items-center justify-between">
-                          <p className="text-sm font-semibold text-text">Participants</p>
+                          <p className="text-sm font-semibold text-text">{t('expense.participants')}</p>
                           <button
                             type="button"
                             onClick={toggleAllCollectiveParticipants}
                             className="cursor-pointer text-xs font-medium text-secondary transition-colors duration-200 hover:text-secondary/80 focus:outline-none focus:ring-2 focus:ring-secondary/30 rounded px-1.5 py-0.5"
                           >
-                            {selectedParticipantIds.length === members.length ? 'Deselect all' : 'Select all'}
+                            {selectedParticipantIds.length === members.length ? t('expense.deselectAll') : t('expense.selectAll')}
                           </button>
                         </div>
                         <div className="max-h-48 space-y-1 overflow-y-auto">
@@ -752,7 +750,7 @@ const validateStep2 = () => {
                                   {memberName(m)}
                                   {m.userId === currentUserId ? ` (${t('common.you')})` : ''}
                                   {m.isFrozen && (
-                                    <span className="ml-1.5 inline-block text-blue-500" title="This member is frozen">
+                                    <span className="ml-1.5 inline-block text-blue-500" title={t('member.freezeTitle')}>
                                       ❄️
                                     </span>
                                   )}
@@ -763,7 +761,7 @@ const validateStep2 = () => {
                         </div>
                         {selectedParticipantIds.length > 0 && (
                           <p className="text-xs text-text-muted">
-                            {selectedParticipantIds.length} participant{selectedParticipantIds.length !== 1 ? 's' : ''} selected
+                            {t('expense.participantsSelected', { count: selectedParticipantIds.length })}
                           </p>
                         )}
                       </div>
@@ -783,7 +781,7 @@ const validateStep2 = () => {
                           disabled={selectedParticipantIds.length === 0}
                           className="flex-1 cursor-pointer rounded-lg bg-secondary px-4 py-2.5 font-heading text-sm font-semibold text-white transition-all duration-200 hover:bg-secondary/90 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          Next
+                          {t('expense.next')}
                         </button>
                       </div>
                     </>
@@ -793,36 +791,36 @@ const validateStep2 = () => {
                   {collSubStep === 'confirm' && (
                     <>
                       <div className="rounded-lg border border-border bg-background p-4 space-y-3">
-                        <p className="text-sm font-semibold text-text">Confirm expense</p>
+                        <p className="text-sm font-semibold text-text">{t('expense.confirmExpense')}</p>
 
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between">
-                            <span className="text-text-muted">Description</span>
+                            <span className="text-text-muted">{t('expense.description')}</span>
                             <span className="font-medium text-text">{description.trim() || '—'}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-text-muted">Total amount</span>
+                            <span className="text-text-muted">{t('expense.totalAmount')}</span>
                             <span className="font-semibold text-primary">{formatCurrency(parsedAmount)}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-text-muted">Shared costs</span>
+                            <span className="text-text-muted">{t('expense.sharedCosts')}</span>
                             <span className="font-medium text-text">{formatCurrency(parseFloat(sharedCosts) || 0)}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-text-muted">Category</span>
+                            <span className="text-text-muted">{t('expense.category')}</span>
                             <span className="font-medium text-text">
-                              {category.charAt(0) + category.slice(1).toLowerCase()}
+                              {t(`expense.categories.${category}`)}
                             </span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-text-muted">Paid by</span>
+                            <span className="text-text-muted">{t('expense.paidBy')}</span>
                             <span className="font-medium text-text">
                               {memberName(members.find((m) => m.userId === payerId))}
                             </span>
                           </div>
                           <div className="border-t border-border pt-2 mt-2">
                             <p className="text-xs text-text-muted mb-1">
-                              Participants ({selectedParticipantIds.length})
+                              {t('expense.participants')} ({selectedParticipantIds.length})
                             </p>
                             <div className="flex flex-wrap gap-1.5">
                               {selectedParticipantIds.map((uid) => (
@@ -839,7 +837,7 @@ const validateStep2 = () => {
                         </div>
 
                         <div className="rounded-md bg-cta/10 px-3 py-2 text-xs text-cta">
-                          Each participant will report their own item amount after creation.
+                          {t('expense.collectiveInfo')}
                         </div>
                       </div>
 

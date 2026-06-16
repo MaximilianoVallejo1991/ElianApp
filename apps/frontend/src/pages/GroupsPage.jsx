@@ -10,6 +10,8 @@ import {
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../hooks/useAuth';
 import { groupService } from '../services/api';
+
+const CURRENCIES = ['USD', 'EUR', 'GBP', 'MXN', 'COP', 'ARS', 'CLP'];
 import LanguageSwitcher from '../components/LanguageSwitcher';
 
 export default function GroupsPage() {
@@ -271,13 +273,11 @@ export default function GroupsPage() {
                   onChange={(e) => setNewCurrency(e.target.value)}
                   className="w-full cursor-pointer rounded-lg border border-border bg-white px-4 py-3 text-text transition-colors duration-200 focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary/20"
                 >
-                  <option value="USD">USD — US Dollar</option>
-                  <option value="EUR">EUR — Euro</option>
-                  <option value="GBP">GBP — British Pound</option>
-                  <option value="MXN">MXN — Mexican Peso</option>
-                  <option value="COP">COP — Colombian Peso</option>
-                  <option value="ARS">ARS — Argentine Peso</option>
-                  <option value="CLP">CLP — Chilean Peso</option>
+                  {CURRENCIES.map((code) => (
+                    <option key={code} value={code}>
+                      {code} — {t(`currency.${code}`)}
+                    </option>
+                  ))}
                 </select>
               </div>
 

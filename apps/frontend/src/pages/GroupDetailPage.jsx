@@ -1488,9 +1488,9 @@ export default function GroupDetailPage() {
         <ConfirmDialog
           title={t('group.deleteGroup')}
           message={expenses.length > 0
-            ? `This group has ${expenses.length} expense${expenses.length !== 1 ? 's' : ''}. Deleting the group will also delete all associated data. This action cannot be undone.`
-            : 'Are you sure you want to delete this group? This action cannot be undone.'}
-          warning={expenses.length > 0 ? 'All expenses, payments, and member data will be permanently deleted.' : undefined}
+            ? t('group.deleteConfirmWithExpenses', { count: expenses.length })
+            : t('group.deleteConfirmMessage')}
+          warning={expenses.length > 0 ? t('group.deleteExpenseWarning') : undefined}
           confirmLabel={t('group.deleteGroup')}
           variant="danger"
           onConfirm={handleDeleteGroup}

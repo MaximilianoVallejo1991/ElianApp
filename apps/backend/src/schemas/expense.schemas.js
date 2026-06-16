@@ -23,9 +23,9 @@ import { AppError } from '../utils/errors.js';
 export const createExpenseSchema = z.object({
   amount: z.number().positive('Amount must be a positive number'),
   description: z.string().min(1, 'Description is required'),
-  category: z.enum(['FOOD', 'TRANSPORT', 'HOUSING', 'ENTERTAINMENT', 'OTHER'], {
+  category: z.enum(['FOOD', 'DRINKS', 'TRANSPORT', 'HOUSING', 'ENTERTAINMENT', 'GIFTS', 'OTHER'], {
     errorMap: () => ({
-      message: 'Category must be FOOD, TRANSPORT, HOUSING, ENTERTAINMENT, or OTHER',
+      message: 'Category must be FOOD, DRINKS, TRANSPORT, HOUSING, ENTERTAINMENT, GIFTS, or OTHER',
     }),
   }),
   payerId: z.string().min(1, 'Payer ID is required'),

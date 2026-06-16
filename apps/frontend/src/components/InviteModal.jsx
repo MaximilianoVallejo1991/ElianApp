@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   LinkIcon,
   ClipboardDocumentIcon,
@@ -9,6 +10,7 @@ import {
 import { inviteService } from '../services/api';
 
 export default function InviteModal({ groupId, onClose }) {
+  const { t } = useTranslation();
   const [inviteUrl, setInviteUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -22,14 +24,14 @@ export default function InviteModal({ groupId, onClose }) {
         const response = await inviteService.generateInviteLink(groupId);
         setInviteUrl(response.data.url);
       } catch (err) {
-        setError(err.message || 'Failed to generate invite link.');
+        setError(err.message || t('invite.failed'));
       } finally {
         setLoading(false);
       }
     }
 
     loadInviteLink();
-  }, [groupId]);
+  }, [groupId, t]);
 
   async function handleCopy() {
     try {
@@ -56,20 +58,20 @@ export default function InviteModal({ groupId, onClose }) {
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
-      aria-label="Invite members"
+      aria-label={t('invite.title')}
     >
       <div className="w-full max-w-md rounded-2xl border border-border bg-white shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
           <div className="flex items-center gap-2">
             <UserPlusIcon className="h-5 w-5 text-primary" aria-hidden="true" />
-            <h2 className="font-heading text-lg font-bold text-primary">Invite members</h2>
+            <h2 className="font-heading text-lg font-bold text-primary">{t('invite.title')}</h2>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="cursor-pointer rounded-lg p-1.5 text-text-muted transition-colors duration-200 hover:bg-secondary/10 hover:text-text focus:outline-none focus:ring-2 focus:ring-secondary/30"
-            aria-label="Close"
+            aria-label={t('common.close')}
           >
             <XMarkIcon className="h-5 w-5" aria-hidden="true" />
           </button>
@@ -82,7 +84,7 @@ export default function InviteModal({ groupId, onClose }) {
               <div
                 className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent"
                 role="status"
-                aria-label="Generating invite link"
+                aria-label={t('invite.generating')}
               />
             </div>
           ) : error ? (
@@ -95,8 +97,7 @@ export default function InviteModal({ groupId, onClose }) {
           ) : (
             <>
               <p className="mb-4 text-sm text-text-muted">
-                Share this link with friends. Anyone with the link can join the group
-                — it expires in 7 days.
+                {t('invite.description')}
               </p>
 
               {/* Invite URL display */}
@@ -116,12 +117,12 @@ export default function InviteModal({ groupId, onClose }) {
                 {copied ? (
                   <>
                     <ClipboardDocumentCheckIcon className="h-5 w-5" aria-hidden="true" />
-                    Copied!
+                    {t('invite.copied')}
                   </>
                 ) : (
                   <>
                     <ClipboardDocumentIcon className="h-5 w-5" aria-hidden="true" />
-                    Copy link
+                    {t('invite.copyLink')}
                   </>
                 )}
               </button>
@@ -136,7 +137,7 @@ export default function InviteModal({ groupId, onClose }) {
             onClick={onClose}
             className="w-full cursor-pointer rounded-lg border border-border px-4 py-2 text-sm font-medium text-text-muted transition-colors duration-200 hover:bg-secondary/5 hover:text-text focus:outline-none focus:ring-2 focus:ring-secondary/30"
           >
-            Close
+            {t('common.close')}
           </button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   XMarkIcon,
   UserIcon,
@@ -29,6 +30,7 @@ export default function MemberManagementPanel({
   onUnfreezeMember,
   onClose,
 }) {
+  const { t } = useTranslation();
   const [confirmRemoveFor, setConfirmRemoveFor] = useState(null);
   const [removingId, setRemovingId] = useState(null);
   const [freezingId, setFreezingId] = useState(null);
@@ -43,7 +45,7 @@ export default function MemberManagementPanel({
       await onRemoveMember(userId);
       setConfirmRemoveFor(null);
     } catch (err) {
-      setError(err.message || 'Failed to remove member.');
+      setError(err.message || t('member.failedRemove'));
     } finally {
       setRemovingId(null);
     }
@@ -59,27 +61,30 @@ export default function MemberManagementPanel({
         await onFreezeMember(userId);
       }
     } catch (err) {
-      setError(err.message || 'Failed to update member freeze status.');
+      setError(err.message || t('member.failedFreeze'));
     } finally {
       setFreezingId(null);
     }
   };
 
   const formatDate = (dateStr) => {
-    if (!dateStr) return 'Unknown';
-    return new Date(dateStr).toLocaleDateString('en-US', {
+    if (!dateStr) return '';
+    return new Date(dateStr).toLocaleDateString(undefined, {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
     });
   };
 
+  const memberName = (member) =>
+    member.user?.nickName || member.user?.email || '';
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-primary/40 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
-      aria-label="Member management"
+      aria-label={t('member.management')}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose?.();
       }}
@@ -88,13 +93,13 @@ export default function MemberManagementPanel({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
           <h2 className="font-heading text-lg font-bold text-primary">
-            Member management
+            {t('member.management')}
           </h2>
           <button
             type="button"
             onClick={onClose}
             className="cursor-pointer rounded-lg p-1.5 text-text-muted transition-colors duration-200 hover:bg-border/50 hover:text-text focus:outline-none focus:ring-2 focus:ring-secondary/30"
-            aria-label="Close"
+            aria-label={t('common.close')}
           >
             <XMarkIcon className="h-5 w-5" aria-hidden="true" />
           </button>
@@ -104,7 +109,7 @@ export default function MemberManagementPanel({
         <div className="px-6 py-5">
           {!isOwner ? (
             <p className="text-sm text-text-muted">
-              Only the group owner can manage members.
+              {t('member.onlyOwnerCanManage')}
             </p>
           ) : (
             <>
@@ -118,8 +123,8 @@ export default function MemberManagementPanel({
               )}
 
               <p className="mb-4 text-xs text-text-muted">
-                {members.length} member{members.length !== 1 ? 's' : ''} in this group.
-                Removing a member does not delete their historical expenses or payments.
+                {t('member.memberCount', { count: members.length })}
+                . {t('member.removeDescription')}
               </p>
 
               <ul className="space-y-2">
@@ -127,6 +132,7 @@ export default function MemberManagementPanel({
                   const isMemberOwner = member.userId === ownerId;
                   const isRemoving = removingId === member.userId;
                   const isConfirming = confirmRemoveFor === member.userId;
+                  const name = memberName(member);
 
                   return (
                     <li
@@ -139,15 +145,15 @@ export default function MemberManagementPanel({
                         </div>
                         <div className="min-w-0">
                           <p className="truncate text-sm font-semibold text-text">
-                            {member.user?.nickName || member.user?.email || 'Unknown'}
+                            {name || '—'}
                             {isMemberOwner && (
                               <span className="ml-2 inline-block rounded-full bg-cta/10 px-2 py-0.5 font-heading text-[10px] font-semibold uppercase tracking-wider text-cta">
-                                Owner
+                                {t('member.owner')}
                               </span>
                             )}
                             {member.isFrozen && (
                               <span className="ml-2 inline-block rounded-full bg-blue-100 px-2 py-0.5 font-heading text-[10px] font-semibold uppercase tracking-wider text-blue-600">
-                                ❄️ Frozen
+                                {t('member.frozen')}
                               </span>
                             )}
                           </p>
@@ -158,7 +164,7 @@ export default function MemberManagementPanel({
                           )}
                           {member.joinedAt && (
                             <p className="text-xs text-text-muted">
-                              Joined {formatDate(member.joinedAt)}
+                              {t('member.joined')} {formatDate(member.joinedAt)}
                             </p>
                           )}
                         </div>
@@ -177,8 +183,10 @@ export default function MemberManagementPanel({
                                 ? 'bg-blue-100 text-blue-600 hover:bg-blue-200'
                                 : 'text-text-muted hover:bg-blue-50 hover:text-blue-500'
                             }`}
-                            aria-label={member.isFrozen ? `Unfreeze ${member.user?.nickName || member.user?.email || 'member'}` : `Freeze ${member.user?.nickName || member.user?.email || 'member'}`}
-                            title={member.isFrozen ? 'Unfreeze member' : 'Freeze member (prevents creating expenses)'}
+                            aria-label={member.isFrozen
+                              ? t('member.unfreeze') + ' ' + name
+                              : t('member.freeze') + ' ' + name}
+                            title={member.isFrozen ? t('member.unfreezeTitle') : t('member.freezeTitle')}
                           >
                             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                               <path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M19.07 4.93L4.93 19.07" />
@@ -194,14 +202,14 @@ export default function MemberManagementPanel({
                                 disabled={isRemoving}
                                 className="cursor-pointer rounded-lg bg-error px-3 py-1.5 text-xs font-semibold text-white transition-colors duration-200 hover:bg-error/90 disabled:opacity-60"
                               >
-                                {isRemoving ? 'Removing…' : 'Confirm'}
+                                {isRemoving ? t('member.removing') : t('common.confirm')}
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setConfirmRemoveFor(null)}
                                 className="cursor-pointer rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-muted transition-colors duration-200 hover:bg-border/30"
                               >
-                                Cancel
+                                {t('common.cancel')}
                               </button>
                             </div>
                           ) : (
@@ -209,7 +217,7 @@ export default function MemberManagementPanel({
                               type="button"
                               onClick={() => setConfirmRemoveFor(member.userId)}
                               className="cursor-pointer rounded-lg p-1.5 text-text-muted transition-colors duration-200 hover:bg-error/10 hover:text-error focus:outline-none focus:ring-2 focus:ring-error/30"
-                              aria-label={`Remove ${member.user?.nickName || member.user?.email || 'member'}`}
+                              aria-label={t('member.remove') + ' ' + name}
                             >
                               <TrashIcon className="h-4 w-4" aria-hidden="true" />
                             </button>
@@ -231,7 +239,7 @@ export default function MemberManagementPanel({
             onClick={onClose}
             className="cursor-pointer rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-text-muted transition-colors duration-200 hover:bg-border/30 focus:outline-none focus:ring-2 focus:ring-secondary/30"
           >
-            Close
+            {t('common.close')}
           </button>
         </div>
       </div>
