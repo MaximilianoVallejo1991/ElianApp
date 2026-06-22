@@ -508,12 +508,20 @@ export async function updateExpense(expenseId, data, userId) {
     throw new AppError('EXPENSE_NOT_FOUND', 404, 'Expense not found');
   }
 
-  // Ownership: only payer or creator can update
-  if (existing.payerId !== userId && existing.createdById !== userId) {
+  // Fetch group to check ownerId
+  const group = await prisma.group.findUnique({
+    where: { id: existing.groupId },
+    select: { ownerId: true },
+  });
+
+  const isGroupOwner = group?.ownerId === userId;
+
+  // Ownership: payer, creator, or group owner can update
+  if (existing.payerId !== userId && existing.createdById !== userId && !isGroupOwner) {
     throw new AppError(
       'FORBIDDEN',
       403,
-      'Only payer or creator can edit this expense',
+      'Only payer, creator, or group owner can edit this expense',
     );
   }
 

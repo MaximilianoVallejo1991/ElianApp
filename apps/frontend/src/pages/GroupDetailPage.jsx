@@ -1087,7 +1087,7 @@ export default function GroupDetailPage() {
                 const isParticipant = (expense.participantIds || []).includes(currentUserId);
                 const isCreator = expense.payerId === currentUserId || expense.createdById === currentUserId;
                 const isGroupOwner = group.ownerId === currentUserId;
-                const canEditExpense = isCreator;
+                const canEditExpense = isCreator || isGroupOwner;
                 const canDeleteExpense = isCreator || isGroupOwner;
                 const isPending = expense.status === 'PENDING';
                 const isMismatch = expense.status === 'MISMATCH';
