@@ -153,7 +153,7 @@ export async function getPeriodBalances(periodId, groupId, userId) {
 
   // Get all expenses for this period
   const expenses = await prisma.expense.findMany({
-    where: { periodId },
+    where: { periodId, deletedAt: null },
     include: {
       splits: {
         select: { userId: true, amount: true },

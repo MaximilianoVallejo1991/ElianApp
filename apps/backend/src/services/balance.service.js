@@ -101,8 +101,8 @@ export async function calculateGroupBalances(groupId, userId, periodId) {
   // 4. Fetch all expenses with splits for this group
   // Only include expenses where isLocked=true
   const expenseWhere = expensePeriodId
-    ? { groupId, isLocked: true, periodId: expensePeriodId }
-    : { groupId, isLocked: true };
+    ? { groupId, isLocked: true, deletedAt: null, periodId: expensePeriodId }
+    : { groupId, isLocked: true, deletedAt: null };
 
   const expenses = await prisma.expense.findMany({
     where: expenseWhere,
