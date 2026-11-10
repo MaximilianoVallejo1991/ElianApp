@@ -59,6 +59,8 @@ async function requireActiveMember(groupId, userId) {
 async function computeSplits(totalAmount, splitType, splits, groupId, participantIds) {
   validateSplits(totalAmount, splitType, splits);
 
+  let calculatedSplits;
+
   if (splitType === 'EQUAL') {
     let memberIds;
 
@@ -74,10 +76,8 @@ async function computeSplits(totalAmount, splitType, splits, groupId, participan
       memberIds = activeMembers.map((m) => m.userId);
     }
 
-    return calculateEqualSplits(totalAmount, memberIds);
-  }
-
-  if (splitType === 'PERCENTAGE') {
+    calculatedSplits = calculateEqualSplits(totalAmount, memberIds);
+  } else if (splitType === 'PERCENTAGE') {
     let filteredSplits = splits;
 
     // If participantIds provided, filter splits to only those participants
@@ -99,10 +99,25 @@ async function computeSplits(totalAmount, splitType, splits, groupId, participan
       }
     }
 
-    return calculatePercentageSplits(totalAmount, filteredSplits);
+    calculatedSplits = calculatePercentageSplits(totalAmount, filteredSplits);
+  } else {
+    throw new AppError('INVALID_SPLITS', 400, 'Unknown split type');
   }
 
-  throw new AppError('INVALID_SPLITS', 400, 'Unknown split type');
+  // Defense-in-depth (ADR-6): whatever branch produced them, the computed
+  // splits MUST sum to the expense amount. This is deliberately a REJECT,
+  // not a rescale — `splits`/`participantIds` are two sources of truth that
+  // can disagree, and silently reinterpreting how much each person owes is
+  // a money decision the server should not make unilaterally. Redundant
+  // with calculatePercentageSplits' own internal guard (PR 1) for the
+  // PERCENTAGE case today, but generic across split types and resilient to
+  // future changes in either pure function.
+  const computedTotal = calculatedSplits.reduce((sum, s) => sum + s.amount, 0);
+  if (Math.abs(computedTotal - totalAmount) > 0.01) {
+    throw new AppError('VALIDATION_ERROR', 400, 'Split amounts must sum to expense amount');
+  }
+
+  return calculatedSplits;
 }
 
 // ---------------------------------------------------------------------------
@@ -533,7 +548,24 @@ export async function updateExpense(expenseId, data, userId) {
 
   // If amount or splitType changed, recalculate splits
   if (data.amount !== undefined || data.splitType !== undefined || data.splits !== undefined) {
-    const splitsInput = data.splits ?? [];
+    let splitsInput = data.splits;
+
+    if (splitsInput === undefined) {
+      // No splits provided in this partial update — fall back to the
+      // expense's EXISTING persisted splits instead of treating "omitted"
+      // as "empty". This lets computeSplits re-derive/re-validate the
+      // existing percentages against the new amount (e.g. a PUT with only
+      // `{ amount }` on a PERCENTAGE expense). Only `percentage` is reused;
+      // `amount` is recomputed fresh by computeSplits for the new total.
+      const existingSplits = await prisma.expenseSplit.findMany({
+        where: { expenseId },
+      });
+      splitsInput = existingSplits.map((s) => ({
+        userId: s.userId,
+        percentage: s.percentage !== null ? Number(s.percentage) : undefined,
+      }));
+    }
+
     const calculatedSplits = await computeSplits(
       effectiveAmount,
       effectiveSplitType,
