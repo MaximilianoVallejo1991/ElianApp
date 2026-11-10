@@ -173,6 +173,27 @@ describe('calculatePercentageSplits', () => {
     ).toThrow('Split percentages must sum to 100');
   });
 
+  it('throws AppError INVALID_SPLITS when a split has a negative percentage', () => {
+    // Reviewer-found regression: the sum guard only checked that percentages
+    // summed to ~100, not that each individual percentage was non-negative.
+    // A negative/positive pair that sums to 100 (e.g. -10 and 110) sailed
+    // through and produced a negative amount for the negative-percentage
+    // participant — the exact negative-amount defect this PR exists to fix,
+    // reached through a different input than rounding accumulation.
+    expect(() =>
+      calculatePercentageSplits(100, [
+        { userId: 'u1', percentage: -10 },
+        { userId: 'u2', percentage: 110 },
+      ]),
+    ).toThrow(AppError);
+    expect(() =>
+      calculatePercentageSplits(100, [
+        { userId: 'u1', percentage: -10 },
+        { userId: 'u2', percentage: 110 },
+      ]),
+    ).toThrow('Split percentages must sum to 100');
+  });
+
   it('throws AppError INVALID_SPLITS for an empty splits array when totalAmount > 0', () => {
     // Reviewer-found regression: the special-cased empty-array early return
     // bypassed the percentage-sum guard entirely, silently returning [] for

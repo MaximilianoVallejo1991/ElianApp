@@ -41,7 +41,11 @@ export function calculateEqualSplits(totalAmount, memberIds) {
  * an unfair share of the remainder. An empty array or non-numeric percentage
  * also fails this check — there is no valid "empty" or "NaN" 100%-summing
  * percentage set, so both are rejected rather than silently producing `[]`
- * or `NaN` amounts.
+ * or `NaN` amounts. Each individual percentage must also be a finite number
+ * `>= 0` — a negative/positive pair that sums to 100 (e.g. -10 and 110)
+ * would otherwise pass the sum check and produce a negative `amount` for
+ * the negative-percentage participant, the exact defect this function
+ * exists to prevent.
  *
  * Percentages within epsilon tolerance of (but not exactly) 100 are rescaled
  * to sum to exactly 100 before the cents math runs — otherwise the cents
@@ -60,12 +64,19 @@ export function calculateEqualSplits(totalAmount, memberIds) {
  * @param {Array<{ userId: string, percentage: number }>} splits — percentages must sum to 100
  * @returns {Array<{ userId: string, amount: number, percentage: number }>}
  * @throws {AppError} INVALID_SPLITS — when the percentages don't sum to 100,
- *   are missing/non-numeric, or `splits` is empty
+ *   are missing/non-numeric, are negative, or `splits` is empty
  */
 export function calculatePercentageSplits(totalAmount, splits) {
   const epsilon = 0.01; // tolerance for floating-point rounding (mirrors validateSplits)
   const percentageSum = (splits || []).reduce((sum, s) => sum + s.percentage, 0);
-  if (!Number.isFinite(percentageSum) || Math.abs(percentageSum - 100) > epsilon) {
+  const hasNegativePercentage = (splits || []).some(
+    (s) => !Number.isFinite(s.percentage) || s.percentage < 0,
+  );
+  if (
+    !Number.isFinite(percentageSum) ||
+    Math.abs(percentageSum - 100) > epsilon ||
+    hasNegativePercentage
+  ) {
     throw new AppError(
       'INVALID_SPLITS',
       400,
