@@ -56,14 +56,14 @@ New tests added to both `splits.test.js` files, each confirmed RED against pre-f
 
 ## Phase 2: Soft-Delete Filters + Prisma Mock Harness — PR 2 `[backend]`
 
-- [ ] 2.1 [infra] Create `apps/backend/src/services/__tests__/soft-delete-filters.test.js` skeleton: `vi.mock` of `../../lib/prisma.js` (payment/expense mocks), `beforeEach(vi.clearAllMocks)` — no assertions yet
-- [ ] 2.2 [RED] Assert `deletedAt: null` reaches every Bug-1 call site (closure.service.js L78/157/218/278/349; balance.service.js L119-121; period.service.js L51-65/101-103/165/340/390; group.service.js L119/134); add 2 cases: `acceptPayment`/`rejectPayment` on a soft-deleted payment throw `PAYMENT_NOT_FOUND` and never call `update`
-- [ ] 2.3 [GREEN] `closure.service.js`: add `deletedAt: null` to L78 ACCEPTED query and the 4 PENDING counts
-- [ ] 2.4 [GREEN] `balance.service.js`: add `deletedAt: null` to both `paymentWhere` branches (L119-121)
-- [ ] 2.5 [GREEN] `period.service.js`: filtered `_count` (L51-53, L101-103); `deletedAt: null` at L62/65/165/340/390
-- [ ] 2.6 [GREEN] `group.service.js`: `where: { deletedAt: null }` as first key of `expenses` (L119) and `payments` (L134) includes
-- [ ] 2.7 [GREEN] `payment.service.js` `acceptPayment`: separate `if (payment.deletedAt !== null) throw AppError('PAYMENT_NOT_FOUND', 404, …)` block after the `!payment` check (ADR-4)
-- [ ] 2.8 [GREEN] Same guard block in `rejectPayment`; confirm all Phase 2 assertions pass
+- [x] 2.1 [infra] Create `apps/backend/src/services/__tests__/soft-delete-filters.test.js` skeleton: `vi.mock` of `../../lib/prisma.js` (payment/expense mocks), `beforeEach(vi.clearAllMocks)` — no assertions yet
+- [x] 2.2 [RED] Assert `deletedAt: null` reaches every Bug-1 call site (closure.service.js L78/157/218/278/349; balance.service.js L119-121; period.service.js L51-65/101-103/165/340/390; group.service.js L119/134); add 2 cases: `acceptPayment`/`rejectPayment` on a soft-deleted payment throw `PAYMENT_NOT_FOUND` and never call `update`
+- [x] 2.3 [GREEN] `closure.service.js`: add `deletedAt: null` to L78 ACCEPTED query and the 4 PENDING counts
+- [x] 2.4 [GREEN] `balance.service.js`: add `deletedAt: null` to both `paymentWhere` branches (L119-121)
+- [x] 2.5 [GREEN] `period.service.js`: filtered `_count` (L51-53, L101-103); `deletedAt: null` at L62/65/165/340/390
+- [x] 2.6 [GREEN] `group.service.js`: `where: { deletedAt: null }` as first key of `expenses` (L119) and `payments` (L134) includes
+- [x] 2.7 [GREEN] `payment.service.js` `acceptPayment`: separate `if (payment.deletedAt !== null) throw AppError('PAYMENT_NOT_FOUND', 404, …)` block after the `!payment` check (ADR-4)
+- [x] 2.8 [GREEN] Same guard block in `rejectPayment`; confirm all Phase 2 assertions pass
 
 ## Phase 3: Service Guards Reusing the Harness — PR 3 `[backend]`
 
