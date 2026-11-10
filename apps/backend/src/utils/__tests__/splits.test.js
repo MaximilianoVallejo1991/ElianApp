@@ -136,9 +136,51 @@ describe('calculatePercentageSplits', () => {
     result.forEach((s) => expect(s.amount).toBe(0));
   });
 
-  it('handles empty splits array', () => {
-    const result = calculatePercentageSplits(100, []);
-    expect(result).toEqual([]);
+  it('rescales percentages within epsilon tolerance so cents still sum exactly to the total', () => {
+    // Reviewer-found regression: percentages summing to 100.0066 (within the
+    // 0.01 epsilon tolerance, so the sum guard passes) must NOT feed raw
+    // percentages into the cents math — that would make the distributed cents
+    // overshoot totalCents and corrupt leftoverCents (potentially negative or
+    // larger than splits.length, which `order.slice(0, leftoverCents)` would
+    // silently mis-handle). Normalizing to exactly 100 first fixes this.
+    const result = calculatePercentageSplits(10000, [
+      { userId: 'u1', percentage: 60.0033 },
+      { userId: 'u2', percentage: 40.0033 },
+    ]);
+    expect(result).toHaveLength(2);
+    const total = result.reduce((sum, s) => sum + s.amount, 0);
+    expect(total).toBe(10000);
+    // Original (non-normalized) percentages are still reported to callers.
+    expect(result[0].percentage).toBe(60.0033);
+    expect(result[1].percentage).toBe(40.0033);
+  });
+
+  it('throws AppError INVALID_SPLITS when a percentage is missing or NaN', () => {
+    // Reviewer-found regression: Math.abs(NaN - 100) > epsilon is always
+    // false, so a non-numeric percentage silently bypassed the sum guard
+    // and produced amount: NaN in the output.
+    expect(() =>
+      calculatePercentageSplits(100, [
+        { userId: 'u1', percentage: 60 },
+        { userId: 'u2' }, // missing percentage -> NaN
+      ]),
+    ).toThrow(AppError);
+    expect(() =>
+      calculatePercentageSplits(100, [
+        { userId: 'u1', percentage: 60 },
+        { userId: 'u2', percentage: NaN },
+      ]),
+    ).toThrow('Split percentages must sum to 100');
+  });
+
+  it('throws AppError INVALID_SPLITS for an empty splits array when totalAmount > 0', () => {
+    // Reviewer-found regression: the special-cased empty-array early return
+    // bypassed the percentage-sum guard entirely, silently returning [] for
+    // a real, non-zero expense amount instead of surfacing the error.
+    expect(() => calculatePercentageSplits(100, [])).toThrow(AppError);
+    expect(() => calculatePercentageSplits(100, [])).toThrow(
+      'Split percentages must sum to 100',
+    );
   });
 
   it('throws AppError INVALID_SPLITS when the percentages do not sum to 100', () => {

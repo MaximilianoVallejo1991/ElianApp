@@ -36,7 +36,15 @@ export function calculateEqualSplits(totalAmount, memberIds) {
  * Defensively re-checks that `splits` sums to 100% before computing amounts —
  * a caller passing a filtered subset that does not represent the full 100%
  * would otherwise have one element silently absorb an unfair share of the
- * remainder.
+ * remainder. An empty array or non-numeric percentage also fails this check
+ * — there is no valid "empty" or "NaN" 100%-summing percentage set, so both
+ * are rejected rather than silently producing `[]` or `NaN` amounts.
+ *
+ * Percentages within epsilon tolerance of (but not exactly) 100 are rescaled
+ * to sum to exactly 100 before the cents math runs — otherwise the cents
+ * distribution below would not sum to `totalCents`, corrupting
+ * `leftoverCents`. The original, non-normalized percentage is still what
+ * gets returned to callers.
  *
  * Uses the largest-remainder method (Hamilton apportionment), computed in
  * integer cents, to distribute the rounding remainder: unlike a scheme where
@@ -48,22 +56,26 @@ export function calculateEqualSplits(totalAmount, memberIds) {
  * @param {number} totalAmount — total expense amount
  * @param {Array<{ userId: string, percentage: number }>} splits — percentages must sum to 100
  * @returns {Array<{ userId: string, amount: number, percentage: number }>}
- * @throws {Error} when the percentages don't sum to 100
+ * @throws {Error} when the percentages don't sum to 100, are missing/non-numeric,
+ *   or `splits` is empty
  */
 export function calculatePercentageSplits(totalAmount, splits) {
-  if (!splits || splits.length === 0) {
-    return [];
-  }
-
   const epsilon = 0.01; // tolerance for floating-point rounding (mirrors backend validateSplits)
-  const percentageSum = splits.reduce((sum, s) => sum + s.percentage, 0);
-  if (Math.abs(percentageSum - 100) > epsilon) {
+  const percentageSum = (splits || []).reduce((sum, s) => sum + s.percentage, 0);
+  if (!Number.isFinite(percentageSum) || Math.abs(percentageSum - 100) > epsilon) {
     throw new Error('Split percentages must sum to 100');
   }
 
   const totalCents = Math.round(totalAmount * 100);
 
-  const exactCents = splits.map((s) => (totalCents * s.percentage) / 100);
+  // Rescale each percentage so they sum to exactly 100 — the sum guard above
+  // only enforces "within epsilon," and feeding raw percentages into the
+  // cents math when the sum is e.g. 100.0066 would make distributedFloor
+  // overshoot totalCents, pushing leftoverCents negative or past
+  // splits.length.
+  const normalizedPercentages = splits.map((s) => (s.percentage * 100) / percentageSum);
+
+  const exactCents = normalizedPercentages.map((p) => (totalCents * p) / 100);
   const floorCents = exactCents.map((c) => Math.floor(c));
   const remainders = exactCents.map((c, i) => c - floorCents[i]);
 
