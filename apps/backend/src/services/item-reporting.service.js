@@ -35,6 +35,16 @@ export async function reportItem(expenseId, userId, amount, description) {
     throw new AppError('INVALID_SPLIT_TYPE', 400, 'Item reporting is only for COLLECTIVE expenses');
   }
 
+  // Authorization-before-state (mirrors unlockExpense's ordering): a
+  // non-participant is rejected here even if the expense is also locked —
+  // they never had a legitimate claim to report an item in the first
+  // place, so NOT_PARTICIPANT (403) wins over EXPENSE_LOCKED (409).
+  // `participantIds` is a Postgres scalar array already on the fetched
+  // expense row — no extra query needed.
+  if (!expense.participantIds.includes(userId)) {
+    throw new AppError('NOT_PARTICIPANT', 403, 'Only participants can report items');
+  }
+
   if (expense.isLocked) {
     throw new AppError('EXPENSE_LOCKED', 409, 'Expense is locked');
   }
