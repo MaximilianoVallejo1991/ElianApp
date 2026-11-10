@@ -61,9 +61,6 @@ export async function listPeriods(groupId, userId) {
   const periodsWithSettlement = await Promise.all(
     periods.map(async (period) => {
       if (period.status === 'CLOSED' || period.status === 'FINAL') {
-        const rejectedCount = await prisma.payment.count({
-          where: { periodId: period.id, status: 'REJECTED', deletedAt: null },
-        });
         const pendingCount = await prisma.payment.count({
           where: { periodId: period.id, status: 'PENDING', deletedAt: null },
         });

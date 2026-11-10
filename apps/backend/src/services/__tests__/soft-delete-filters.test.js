@@ -205,7 +205,12 @@ describe('period.service.js — soft-deleted expenses and payments excluded', ()
       expect(call[0].where.periodId).toBe(periodId);
       expect(call[0].where.deletedAt).toBeNull();
     }
-    expect(prisma.payment.count).toHaveBeenCalledTimes(2);
+    // Only pendingCount is computed — rejectedCount was dead code (computed,
+    // never read) and was removed.
+    expect(prisma.payment.count).toHaveBeenCalledTimes(1);
+    expect(prisma.payment.count).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ status: 'PENDING' }) }),
+    );
   });
 
   it('getPeriodDetails filters _count relations to exclude soft-deleted records', async () => {
