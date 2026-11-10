@@ -49,7 +49,10 @@ export async function listPeriods(groupId, userId) {
       closedAt: true,
       createdAt: true,
       _count: {
-        select: { expenses: true, payments: true },
+        select: {
+          expenses: { where: { deletedAt: null } },
+          payments: { where: { deletedAt: null } },
+        },
       },
     },
   });
@@ -58,11 +61,8 @@ export async function listPeriods(groupId, userId) {
   const periodsWithSettlement = await Promise.all(
     periods.map(async (period) => {
       if (period.status === 'CLOSED' || period.status === 'FINAL') {
-        const rejectedCount = await prisma.payment.count({
-          where: { periodId: period.id, status: 'REJECTED' },
-        });
         const pendingCount = await prisma.payment.count({
-          where: { periodId: period.id, status: 'PENDING' },
+          where: { periodId: period.id, status: 'PENDING', deletedAt: null },
         });
         return {
           ...period,
@@ -99,7 +99,10 @@ export async function getPeriodDetails(periodId, groupId, userId) {
     where: { id: periodId, groupId },
     include: {
       _count: {
-        select: { expenses: true, payments: true },
+        select: {
+          expenses: { where: { deletedAt: null } },
+          payments: { where: { deletedAt: null } },
+        },
       },
     },
   });
@@ -163,7 +166,7 @@ export async function getPeriodBalances(periodId, groupId, userId) {
 
   // Get all ACCEPTED payments for this period
   const payments = await prisma.payment.findMany({
-    where: { periodId, status: 'ACCEPTED' },
+    where: { periodId, status: 'ACCEPTED', deletedAt: null },
     select: { fromUserId: true, toUserId: true, amount: true },
   });
 
@@ -338,7 +341,7 @@ export async function getPeriodExpenses(periodId, groupId, userId) {
   }
 
   return prisma.expense.findMany({
-    where: { periodId },
+    where: { periodId, deletedAt: null },
     include: {
       splits: {
         include: {
@@ -388,7 +391,7 @@ export async function getPeriodPayments(periodId, groupId, userId) {
   }
 
   return prisma.payment.findMany({
-    where: { periodId },
+    where: { periodId, deletedAt: null },
     include: {
       fromUser: {
         select: { id: true, email: true, nickName: true },

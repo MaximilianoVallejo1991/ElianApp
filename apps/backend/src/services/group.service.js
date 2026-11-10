@@ -117,6 +117,7 @@ export async function getGroupById(groupId) {
         },
       },
       expenses: {
+        where: { deletedAt: null },
         include: {
           splits: {
             include: {
@@ -132,6 +133,7 @@ export async function getGroupById(groupId) {
         orderBy: { createdAt: 'desc' },
       },
       payments: {
+        where: { deletedAt: null },
         include: {
           fromUser: {
             select: { id: true, email: true, nickName: true },

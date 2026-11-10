@@ -76,7 +76,7 @@ async function requireZeroBalances(periodId, groupId) {
   });
 
   const payments = await prisma.payment.findMany({
-    where: { periodId, status: 'ACCEPTED' },
+    where: { periodId, status: 'ACCEPTED', deletedAt: null },
     select: { fromUserId: true, toUserId: true, amount: true },
   });
 
@@ -155,7 +155,7 @@ export async function startClosure(groupId, userId) {
 
   // Check for PENDING payments in current period
   const pendingPayments = await prisma.payment.count({
-    where: { periodId: period.id, status: 'PENDING' },
+    where: { periodId: period.id, status: 'PENDING', deletedAt: null },
   });
 
   if (pendingPayments > 0) {
@@ -219,6 +219,7 @@ export async function completeClosure(groupId, userId) {
     where: {
       periodId: period.id,
       status: 'PENDING',
+      deletedAt: null,
     },
   });
 
@@ -279,6 +280,7 @@ export async function partialClosure(groupId, userId) {
     where: {
       periodId: period.id,
       status: 'PENDING',
+      deletedAt: null,
     },
   });
 
@@ -350,6 +352,7 @@ export async function finalClosure(groupId, userId) {
     where: {
       periodId: period.id,
       status: 'PENDING',
+      deletedAt: null,
     },
   });
 
