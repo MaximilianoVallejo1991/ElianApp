@@ -3,6 +3,7 @@ import {
   calculateEqualSplits,
   calculatePercentageSplits,
 } from '../splits.js';
+import { AppError } from '../errors.js';
 
 describe('calculateEqualSplits', () => {
   it('returns empty array when no members provided', () => {
@@ -110,5 +111,24 @@ describe('calculatePercentageSplits', () => {
   it('handles empty splits array', () => {
     const result = calculatePercentageSplits(100, []);
     expect(result).toEqual([]);
+  });
+
+  it('throws AppError INVALID_SPLITS when the percentages do not sum to 100', () => {
+    expect(() =>
+      calculatePercentageSplits(100, [{ userId: 'u1', percentage: 50 }]),
+    ).toThrow(AppError);
+    expect(() =>
+      calculatePercentageSplits(100, [{ userId: 'u1', percentage: 50 }]),
+    ).toThrow('Split percentages must sum to 100');
+  });
+
+  it('regression: a filtered subset with percentage well below 100 must reject, not silently bill the full amount', () => {
+    // Reviewer-found regression: a valid 3-way split (u1 33.33, u2 33.33,
+    // u3 33.34) filtered down to participantIds=['u3'] must not reach this
+    // function and silently return amount: 100 for u3 (the entire expense
+    // billed to one person instead of their 33.34% share).
+    expect(() =>
+      calculatePercentageSplits(100, [{ userId: 'u3', percentage: 33.34 }]),
+    ).toThrow(AppError);
   });
 });

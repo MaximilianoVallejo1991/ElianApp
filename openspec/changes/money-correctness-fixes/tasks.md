@@ -36,6 +36,10 @@ Design proposed `Bug2 → Bug1 → Bug3 → Bug4`, calling Bug 2 "zero infrastru
 - [x] 1.3 [RED] Mirror 1.1's cases in `apps/frontend/src/utils/__tests__/splits.test.js`; confirm failure
 - [x] 1.4 [GREEN] Apply the byte-identical fix to `apps/frontend/src/utils/splits.js`; confirm backend/frontend parity
 
+**Addendum (PR 1, post-merge-review fix)** — fresh-context review of PR 1's diff found that `calculatePercentageSplits` now assumes its input `splits` sums to 100%, but `expense.service.js`'s `computeSplits` can call it with a `participantIds`-filtered subset that doesn't (e.g. a single filtered participant at 33.34% would get billed `amount: 100`). Added a defensive guard directly in both `calculatePercentageSplits` copies — throws `AppError('INVALID_SPLITS', 400, 'Split percentages must sum to 100')` (backend) / `Error('Split percentages must sum to 100')` (frontend, no `AppError` equivalent exists there) when `Math.abs(sum(percentage) - 100) > 0.01`. The proper service-layer re-validation of the filtered subset (ADR-6, PR 3 task 3.2) is unchanged and still required — this is a defense-in-depth guard on the pure function, not a replacement for it.
+
+- [x] 1.5 [RED→GREEN] `apps/backend/src/utils/splits.js` + `apps/frontend/src/utils/splits.js`: add percentage-sum guard to `calculatePercentageSplits` (throws on non-100% subsets); regression tests added to both `splits.test.js` files for the exact filtered-subset scenario
+
 ## Phase 2: Soft-Delete Filters + Prisma Mock Harness — PR 2 `[backend]`
 
 - [ ] 2.1 [infra] Create `apps/backend/src/services/__tests__/soft-delete-filters.test.js` skeleton: `vi.mock` of `../../lib/prisma.js` (payment/expense mocks), `beforeEach(vi.clearAllMocks)` — no assertions yet

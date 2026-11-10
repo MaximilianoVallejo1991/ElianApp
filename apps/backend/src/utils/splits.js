@@ -5,6 +5,8 @@
  * These functions are unit-testable without any database dependencies.
  */
 
+import { AppError } from './errors.js';
+
 /**
  * Calculate equal splits — each member pays the same share.
  *
@@ -33,17 +35,31 @@ export function calculateEqualSplits(totalAmount, memberIds) {
 /**
  * Calculate percentage splits — each member pays `totalAmount * percentage / 100`.
  *
- * The caller MUST validate that percentages sum to 100 before calling.
+ * Defensively re-checks that `splits` sums to 100% before computing amounts —
+ * a caller passing a filtered subset (e.g. by participantIds) that does not
+ * represent the full 100% would otherwise have the last element silently
+ * absorb the entire remainder onto a single participant.
  * The last participant absorbs any rounding remainder so the total of all
  * splits always sums exactly to `totalAmount` (mirrors calculateEqualSplits).
  *
  * @param {number} totalAmount — total expense amount
  * @param {Array<{ userId: string, percentage: number }>} splits — percentages must sum to 100
  * @returns {Array<{ userId: string, amount: number, percentage: number }>}
+ * @throws {AppError} INVALID_SPLITS — when the percentages don't sum to 100
  */
 export function calculatePercentageSplits(totalAmount, splits) {
   if (!splits || splits.length === 0) {
     return [];
+  }
+
+  const epsilon = 0.01; // tolerance for floating-point rounding (mirrors validateSplits)
+  const percentageSum = splits.reduce((sum, s) => sum + s.percentage, 0);
+  if (Math.abs(percentageSum - 100) > epsilon) {
+    throw new AppError(
+      'INVALID_SPLITS',
+      400,
+      'Split percentages must sum to 100',
+    );
   }
 
   const result = splits.map((s) => ({
