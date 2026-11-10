@@ -64,16 +64,32 @@ describe('calculatePercentageSplits', () => {
     expect(result[1]).toEqual({ userId: 'u2', amount: 100, percentage: 50 });
   });
 
-  it('handles fractional percentages', () => {
-    const result = calculatePercentageSplits(100, [
+  it('handles fractional percentages and sums exactly to the total', () => {
+    const result = calculatePercentageSplits(10, [
       { userId: 'u1', percentage: 33.33 },
       { userId: 'u2', percentage: 33.33 },
       { userId: 'u3', percentage: 33.34 },
     ]);
     expect(result).toHaveLength(3);
-    expect(result[0].amount).toBe(33.33);
-    expect(result[1].amount).toBe(33.33);
-    expect(result[2].amount).toBe(33.34);
+    expect(result[0].amount).toBe(3.33);
+    expect(result[1].amount).toBe(3.33);
+    expect(result[2].amount).toBe(3.34);
+
+    // The sum must equal the original total exactly — naive per-share
+    // rounding undershoots to 9.99 without remainder absorption.
+    const total = result.reduce((sum, s) => sum + s.amount, 0);
+    expect(total).toBe(10);
+  });
+
+  it('absorbs an over-shooting remainder in the last participant', () => {
+    const result = calculatePercentageSplits(10, [
+      { userId: 'u1', percentage: 16.67 },
+      { userId: 'u2', percentage: 16.67 },
+      { userId: 'u3', percentage: 66.66 },
+    ]);
+    // naive per-share rounding overshoots to 10.01 without remainder absorption
+    const total = result.reduce((sum, s) => sum + s.amount, 0);
+    expect(Math.round(total * 100) / 100).toBe(10);
   });
 
   it('returns the percentage in each split', () => {

@@ -34,18 +34,28 @@ export function calculateEqualSplits(totalAmount, memberIds) {
  * Calculate percentage splits — each member pays `totalAmount * percentage / 100`.
  *
  * The caller MUST validate that percentages sum to 100 before calling.
- * Resulting amounts are rounded to 2 decimal places.
+ * The last participant absorbs any rounding remainder so the total of all
+ * splits always sums exactly to `totalAmount` (mirrors calculateEqualSplits).
  *
  * @param {number} totalAmount — total expense amount
  * @param {Array<{ userId: string, percentage: number }>} splits — percentages must sum to 100
  * @returns {Array<{ userId: string, amount: number, percentage: number }>}
  */
 export function calculatePercentageSplits(totalAmount, splits) {
-  return splits.map((s) => ({
+  if (!splits || splits.length === 0) {
+    return [];
+  }
+
+  const result = splits.map((s) => ({
     userId: s.userId,
     amount: Math.round((totalAmount * s.percentage / 100) * 100) / 100,
     percentage: s.percentage,
   }));
+
+  const distributed = result.slice(0, -1).reduce((sum, s) => sum + s.amount, 0);
+  result[result.length - 1].amount = Math.round((totalAmount - distributed) * 100) / 100;
+
+  return result;
 }
 
 /**
