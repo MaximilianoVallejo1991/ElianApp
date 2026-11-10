@@ -35,10 +35,15 @@ export function calculateEqualSplits(totalAmount, memberIds) {
  *
  * Defensively re-checks that `splits` sums to 100% before computing amounts —
  * a caller passing a filtered subset that does not represent the full 100%
- * would otherwise have the last element silently absorb the entire remainder
- * onto a single participant.
- * The last participant absorbs any rounding remainder so the total of all
- * splits always sums exactly to `totalAmount` (mirrors calculateEqualSplits).
+ * would otherwise have one element silently absorb an unfair share of the
+ * remainder.
+ *
+ * Uses the largest-remainder method (Hamilton apportionment), computed in
+ * integer cents, to distribute the rounding remainder: unlike a scheme where
+ * a single element absorbs the entire remainder, this cannot push any
+ * participant's amount negative, and the cent(s) left over after flooring
+ * every share go to whichever participants were closest to rounding up —
+ * not to whoever happens to be last in the array.
  *
  * @param {number} totalAmount — total expense amount
  * @param {Array<{ userId: string, percentage: number }>} splits — percentages must sum to 100
@@ -56,16 +61,29 @@ export function calculatePercentageSplits(totalAmount, splits) {
     throw new Error('Split percentages must sum to 100');
   }
 
-  const result = splits.map((s) => ({
+  const totalCents = Math.round(totalAmount * 100);
+
+  const exactCents = splits.map((s) => (totalCents * s.percentage) / 100);
+  const floorCents = exactCents.map((c) => Math.floor(c));
+  const remainders = exactCents.map((c, i) => c - floorCents[i]);
+
+  const distributedFloor = floorCents.reduce((sum, c) => sum + c, 0);
+  const leftoverCents = totalCents - distributedFloor;
+
+  // Rank indices by remainder descending; on a tie, the earlier original
+  // index wins, keeping the output deterministic regardless of engine
+  // sort-stability guarantees.
+  const order = splits
+    .map((_, i) => i)
+    .sort((a, b) => remainders[b] - remainders[a] || a - b);
+
+  const bumped = new Set(order.slice(0, leftoverCents));
+
+  return splits.map((s, i) => ({
     userId: s.userId,
-    amount: Math.round((totalAmount * s.percentage / 100) * 100) / 100,
+    amount: (floorCents[i] + (bumped.has(i) ? 1 : 0)) / 100,
     percentage: s.percentage,
   }));
-
-  const distributed = result.slice(0, -1).reduce((sum, s) => sum + s.amount, 0);
-  result[result.length - 1].amount = Math.round((totalAmount - distributed) * 100) / 100;
-
-  return result;
 }
 
 /**

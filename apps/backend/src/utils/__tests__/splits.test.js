@@ -82,15 +82,43 @@ describe('calculatePercentageSplits', () => {
     expect(total).toBe(10);
   });
 
-  it('absorbs an over-shooting remainder in the last participant', () => {
+  it('absorbs an over-shooting remainder across the splits', () => {
     const result = calculatePercentageSplits(10, [
       { userId: 'u1', percentage: 16.67 },
       { userId: 'u2', percentage: 16.67 },
       { userId: 'u3', percentage: 66.66 },
     ]);
-    // naive per-share rounding overshoots to 10.01 without remainder absorption
+    // naive per-share rounding overshoots to 10.01 without remainder absorption.
+    // Compare the raw total directly — rounding here would mask a real
+    // off-by-one-cent regression (e.g. 10.01 collapsing to 10).
     const total = result.reduce((sum, s) => sum + s.amount, 0);
-    expect(Math.round(total * 100) / 100).toBe(10);
+    expect(total).toBe(10);
+  });
+
+  it('largest-remainder method never produces a negative amount with many small percentages', () => {
+    // Reviewer-found regression: the old "last element absorbs the entire
+    // remainder" algorithm can push the last participant's amount negative
+    // when many small per-item roundings accumulate (49 participants at
+    // ~2.0406% + 1 at 0.01%, splitting $1000 — the old algorithm produced
+    // amount: -0.09 for the last participant instead of their true ~$0.10).
+    const splits = [];
+    for (let i = 0; i < 49; i++) {
+      splits.push({ userId: `u${i}`, percentage: 2.0406 });
+    }
+    splits.push({ userId: 'u49', percentage: 0.01 });
+
+    const result = calculatePercentageSplits(1000, splits);
+
+    expect(result).toHaveLength(50);
+    result.forEach((s) => {
+      expect(s.amount).toBeGreaterThanOrEqual(0);
+    });
+
+    // Sum exactly in cents to avoid IEEE-754 float accumulation noise across
+    // 50 additions (unrelated to correctness — summing the integer cents
+    // avoids that noise while still catching any real off-by-one-cent bug).
+    const totalCents = result.reduce((sum, s) => sum + Math.round(s.amount * 100), 0);
+    expect(totalCents).toBe(100000);
   });
 
   it('returns the percentage in each split', () => {
