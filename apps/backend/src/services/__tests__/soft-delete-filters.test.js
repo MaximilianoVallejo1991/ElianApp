@@ -21,6 +21,8 @@ import {
   getPeriodPayments,
 } from '../period.service.js';
 import { getGroupById } from '../group.service.js';
+import { acceptPayment, rejectPayment } from '../payment.service.js';
+import { AppError } from '../../utils/errors.js';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -287,5 +289,86 @@ describe('group.service.js — soft-deleted expenses and payments excluded from 
     const callArg = prisma.group.findUnique.mock.calls[0][0];
     expect(callArg.include.expenses.where).toEqual({ deletedAt: null });
     expect(callArg.include.payments.where).toEqual({ deletedAt: null });
+  });
+});
+
+describe('payment.service.js — acceptPayment/rejectPayment reject soft-deleted payments', () => {
+  const paymentId = 'payment-1';
+  const receiverId = 'user-2';
+
+  function softDeletedPayment() {
+    return {
+      id: paymentId,
+      toUserId: receiverId,
+      status: 'PENDING',
+      deletedAt: new Date('2026-01-01T00:00:00.000Z'),
+      group: { id: 'group-1', ownerId: 'user-1', balanceMode: 'DYNAMIC', status: 'ACTIVE' },
+    };
+  }
+
+  function activePayment() {
+    return {
+      id: paymentId,
+      toUserId: receiverId,
+      status: 'PENDING',
+      deletedAt: null,
+      group: { id: 'group-1', ownerId: 'user-1', balanceMode: 'DYNAMIC', status: 'ACTIVE' },
+    };
+  }
+
+  it('acceptPayment throws PAYMENT_NOT_FOUND for a soft-deleted payment and never calls update', async () => {
+    prisma.payment.findUnique.mockResolvedValue(softDeletedPayment());
+
+    await expect(acceptPayment(paymentId, receiverId)).rejects.toMatchObject({
+      code: 'PAYMENT_NOT_FOUND',
+      status: 404,
+    });
+    expect(prisma.payment.update).not.toHaveBeenCalled();
+  });
+
+  it('acceptPayment still accepts a non-deleted PENDING payment (triangulation)', async () => {
+    prisma.payment.findUnique.mockResolvedValue(activePayment());
+    prisma.payment.update.mockResolvedValue({ id: paymentId, status: 'ACCEPTED' });
+
+    const result = await acceptPayment(paymentId, receiverId);
+
+    expect(result).toEqual({ id: paymentId, status: 'ACCEPTED' });
+    expect(prisma.payment.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: paymentId }, data: { status: 'ACCEPTED' } }),
+    );
+  });
+
+  it('rejectPayment throws PAYMENT_NOT_FOUND for a soft-deleted payment and never calls update', async () => {
+    prisma.payment.findUnique.mockResolvedValue(softDeletedPayment());
+
+    await expect(rejectPayment(paymentId, receiverId)).rejects.toMatchObject({
+      code: 'PAYMENT_NOT_FOUND',
+      status: 404,
+    });
+    expect(prisma.payment.update).not.toHaveBeenCalled();
+  });
+
+  it('rejectPayment still rejects a non-deleted PENDING payment (triangulation)', async () => {
+    prisma.payment.findUnique.mockResolvedValue(activePayment());
+    prisma.payment.update.mockResolvedValue({ id: paymentId, status: 'REJECTED' });
+
+    const result = await rejectPayment(paymentId, receiverId, 'wrong amount');
+
+    expect(result).toEqual({ id: paymentId, status: 'REJECTED' });
+    expect(prisma.payment.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: paymentId },
+        data: { status: 'REJECTED', rejectionReason: 'wrong amount' },
+      }),
+    );
+  });
+
+  it('acceptPayment and rejectPayment both reject using the AppError class', async () => {
+    prisma.payment.findUnique.mockResolvedValue(softDeletedPayment());
+
+    await expect(acceptPayment(paymentId, receiverId)).rejects.toBeInstanceOf(AppError);
+
+    prisma.payment.findUnique.mockResolvedValue(softDeletedPayment());
+    await expect(rejectPayment(paymentId, receiverId)).rejects.toBeInstanceOf(AppError);
   });
 });

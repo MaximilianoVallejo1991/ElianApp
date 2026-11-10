@@ -279,6 +279,10 @@ export async function acceptPayment(paymentId, userId) {
     throw new AppError('PAYMENT_NOT_FOUND', 404, 'Payment not found');
   }
 
+  if (payment.deletedAt !== null) {
+    throw new AppError('PAYMENT_NOT_FOUND', 404, 'Payment not found');
+  }
+
   // Only the payment receiver can accept
   if (payment.toUserId !== userId) {
     throw new AppError(
@@ -331,6 +335,10 @@ export async function rejectPayment(paymentId, userId, rejectionReason) {
   });
 
   if (!payment) {
+    throw new AppError('PAYMENT_NOT_FOUND', 404, 'Payment not found');
+  }
+
+  if (payment.deletedAt !== null) {
     throw new AppError('PAYMENT_NOT_FOUND', 404, 'Payment not found');
   }
 
