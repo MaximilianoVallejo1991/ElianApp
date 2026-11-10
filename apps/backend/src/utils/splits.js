@@ -5,6 +5,8 @@
  * These functions are unit-testable without any database dependencies.
  */
 
+import { AppError } from './errors.js';
+
 /**
  * Calculate equal splits — each member pays the same share.
  *
@@ -33,17 +35,83 @@ export function calculateEqualSplits(totalAmount, memberIds) {
 /**
  * Calculate percentage splits — each member pays `totalAmount * percentage / 100`.
  *
- * The caller MUST validate that percentages sum to 100 before calling.
- * Resulting amounts are rounded to 2 decimal places.
+ * Defensively re-checks that `splits` sums to 100% before computing amounts —
+ * a caller passing a filtered subset (e.g. by participantIds) that does not
+ * represent the full 100% would otherwise have one element silently absorb
+ * an unfair share of the remainder. An empty array or non-numeric percentage
+ * also fails this check — there is no valid "empty" or "NaN" 100%-summing
+ * percentage set, so both are rejected rather than silently producing `[]`
+ * or `NaN` amounts. Each individual percentage must also be a finite number
+ * `>= 0` — a negative/positive pair that sums to 100 (e.g. -10 and 110)
+ * would otherwise pass the sum check and produce a negative `amount` for
+ * the negative-percentage participant, the exact defect this function
+ * exists to prevent.
+ *
+ * Percentages within epsilon tolerance of (but not exactly) 100 are rescaled
+ * to sum to exactly 100 before the cents math runs — otherwise the cents
+ * distribution below would not sum to `totalCents`, corrupting
+ * `leftoverCents`. The original, non-normalized percentage is still what
+ * gets returned to callers.
+ *
+ * Uses the largest-remainder method (Hamilton apportionment), computed in
+ * integer cents, to distribute the rounding remainder: unlike a scheme where
+ * a single element absorbs the entire remainder, this cannot push any
+ * participant's amount negative, and the cent(s) left over after flooring
+ * every share go to whichever participants were closest to rounding up —
+ * not to whoever happens to be last in the array.
  *
  * @param {number} totalAmount — total expense amount
  * @param {Array<{ userId: string, percentage: number }>} splits — percentages must sum to 100
  * @returns {Array<{ userId: string, amount: number, percentage: number }>}
+ * @throws {AppError} INVALID_SPLITS — when the percentages don't sum to 100,
+ *   are missing/non-numeric, are negative, or `splits` is empty
  */
 export function calculatePercentageSplits(totalAmount, splits) {
-  return splits.map((s) => ({
+  const epsilon = 0.01; // tolerance for floating-point rounding (mirrors validateSplits)
+  const percentageSum = (splits || []).reduce((sum, s) => sum + s.percentage, 0);
+  const hasNegativePercentage = (splits || []).some(
+    (s) => !Number.isFinite(s.percentage) || s.percentage < 0,
+  );
+  if (
+    !Number.isFinite(percentageSum) ||
+    Math.abs(percentageSum - 100) > epsilon ||
+    hasNegativePercentage
+  ) {
+    throw new AppError(
+      'INVALID_SPLITS',
+      400,
+      'Split percentages must sum to 100',
+    );
+  }
+
+  const totalCents = Math.round(totalAmount * 100);
+
+  // Rescale each percentage so they sum to exactly 100 — the sum guard above
+  // only enforces "within epsilon," and feeding raw percentages into the
+  // cents math when the sum is e.g. 100.0066 would make distributedFloor
+  // overshoot totalCents, pushing leftoverCents negative or past
+  // splits.length.
+  const normalizedPercentages = splits.map((s) => (s.percentage * 100) / percentageSum);
+
+  const exactCents = normalizedPercentages.map((p) => (totalCents * p) / 100);
+  const floorCents = exactCents.map((c) => Math.floor(c));
+  const remainders = exactCents.map((c, i) => c - floorCents[i]);
+
+  const distributedFloor = floorCents.reduce((sum, c) => sum + c, 0);
+  const leftoverCents = totalCents - distributedFloor;
+
+  // Rank indices by remainder descending; on a tie, the earlier original
+  // index wins, keeping the output deterministic regardless of engine
+  // sort-stability guarantees.
+  const order = splits
+    .map((_, i) => i)
+    .sort((a, b) => remainders[b] - remainders[a] || a - b);
+
+  const bumped = new Set(order.slice(0, leftoverCents));
+
+  return splits.map((s, i) => ({
     userId: s.userId,
-    amount: Math.round((totalAmount * s.percentage / 100) * 100) / 100,
+    amount: (floorCents[i] + (bumped.has(i) ? 1 : 0)) / 100,
     percentage: s.percentage,
   }));
 }
