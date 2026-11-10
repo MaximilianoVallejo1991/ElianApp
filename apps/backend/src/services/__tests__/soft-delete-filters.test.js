@@ -12,6 +12,7 @@ import {
   partialClosure,
   finalClosure,
 } from '../closure.service.js';
+import { calculateGroupBalances } from '../balance.service.js';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -114,6 +115,43 @@ describe('closure.service.js — soft-deleted payments excluded', () => {
 
     expect(prisma.payment.count).toHaveBeenCalledWith({
       where: { periodId, status: 'PENDING', deletedAt: null },
+    });
+  });
+});
+
+describe('balance.service.js — soft-deleted payments excluded from paymentWhere', () => {
+  const groupId = 'group-1';
+  const userId = 'user-1';
+
+  it('excludes soft-deleted ACCEPTED payments for a DYNAMIC group (no periodId)', async () => {
+    prisma.group.findUnique.mockResolvedValue({ id: groupId, balanceMode: 'DYNAMIC' });
+    prisma.groupMember.findUnique.mockResolvedValue({ status: 'ACTIVE' });
+    prisma.groupMember.findMany.mockResolvedValue([]);
+    prisma.expense.findMany.mockResolvedValue([]);
+    prisma.payment.findMany.mockResolvedValue([]);
+
+    await calculateGroupBalances(groupId, userId);
+
+    expect(prisma.payment.findMany).toHaveBeenCalledWith({
+      where: { groupId, status: 'ACCEPTED', deletedAt: null },
+      select: { fromUserId: true, toUserId: true, amount: true },
+    });
+  });
+
+  it('excludes soft-deleted ACCEPTED payments for a STATIC group with a periodId', async () => {
+    const periodId = 'period-1';
+    prisma.group.findUnique.mockResolvedValue({ id: groupId, balanceMode: 'STATIC' });
+    prisma.groupMember.findUnique.mockResolvedValue({ status: 'ACTIVE' });
+    prisma.period.findUnique.mockResolvedValue({ id: periodId, status: 'OPEN' });
+    prisma.groupMember.findMany.mockResolvedValue([]);
+    prisma.expense.findMany.mockResolvedValue([]);
+    prisma.payment.findMany.mockResolvedValue([]);
+
+    await calculateGroupBalances(groupId, userId, periodId);
+
+    expect(prisma.payment.findMany).toHaveBeenCalledWith({
+      where: { groupId, status: 'ACCEPTED', deletedAt: null, periodId },
+      select: { fromUserId: true, toUserId: true, amount: true },
     });
   });
 });

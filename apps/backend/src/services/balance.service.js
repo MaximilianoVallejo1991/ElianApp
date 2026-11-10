@@ -117,8 +117,8 @@ export async function calculateGroupBalances(groupId, userId, periodId) {
   // For STATIC with periodId: only ACCEPTED payments in that period
   // For DYNAMIC: all ACCEPTED payments
   const paymentWhere = expensePeriodId
-    ? { groupId, status: 'ACCEPTED', periodId: expensePeriodId }
-    : { groupId, status: 'ACCEPTED' };
+    ? { groupId, status: 'ACCEPTED', deletedAt: null, periodId: expensePeriodId }
+    : { groupId, status: 'ACCEPTED', deletedAt: null };
 
   const payments = await prisma.payment.findMany({
     where: paymentWhere,
