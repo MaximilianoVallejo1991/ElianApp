@@ -20,6 +20,7 @@ import {
   getPeriodExpenses,
   getPeriodPayments,
 } from '../period.service.js';
+import { getGroupById } from '../group.service.js';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -265,5 +266,26 @@ describe('period.service.js — soft-deleted expenses and payments excluded', ()
     expect(prisma.payment.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { periodId, deletedAt: null } }),
     );
+  });
+});
+
+describe('group.service.js — soft-deleted expenses and payments excluded from group detail', () => {
+  const groupId = 'group-1';
+
+  it('getGroupById filters the expenses and payments includes on deletedAt: null', async () => {
+    prisma.group.findUnique.mockResolvedValue({
+      id: groupId,
+      name: 'Trip',
+      owner: { id: 'u1', email: 'u1@test.dev', nickName: 'u1' },
+      members: [],
+      expenses: [],
+      payments: [],
+    });
+
+    await getGroupById(groupId);
+
+    const callArg = prisma.group.findUnique.mock.calls[0][0];
+    expect(callArg.include.expenses.where).toEqual({ deletedAt: null });
+    expect(callArg.include.payments.where).toEqual({ deletedAt: null });
   });
 });
