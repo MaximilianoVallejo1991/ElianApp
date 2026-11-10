@@ -2,13 +2,23 @@
 schema: spec-driven
 
 context: |
-  Tech stack: pnpm monorepo — Express 5 (ESM) backend with Prisma/PostgreSQL,
-    React 19 + Vite + Tailwind CSS 4 frontend, shared package.
-  Architecture: Monorepo with apps/backend, apps/frontend, packages/shared.
+  Tech stack: pnpm monorepo — Express 5 (ESM) backend with Prisma 7/PostgreSQL,
+    React 19 + Vite 8 + Tailwind CSS 4 frontend.
+  Architecture: Monorepo with apps/backend, apps/frontend.
+    `packages/*` is reserved in pnpm-workspace.yaml but no package exists yet
+    (no shared package today — do not assume one when planning changes).
     Backend uses Express + Prisma ORM with PostgreSQL via pg + @prisma/adapter-pg.
-    Frontend uses Vite + React Router + Axios for API calls.
-  Testing: No test runner configured. ESLint on frontend only.
-    TypeScript types installed (devDeps) but backend is plain JS (.js files).
+    Frontend uses Vite + React Router + Axios for API calls, i18next for localization.
+  Testing: Vitest configured in BOTH apps (apps/backend/vitest.config.js,
+    apps/frontend/vitest.config.js) with @vitest/coverage-v8. Real test suites
+    exist and pass: backend 1 file / 11 tests, frontend 2 files / 26 tests
+    (verified by running `pnpm --filter backend test` and
+    `pnpm --filter frontend test` on 2026-11-09). ESLint configured on
+    frontend only (eslint.config.js); backend has no lint script/config.
+    TypeScript devDeps present on both apps but no tsconfig.json in backend;
+    backend source is plain JS (.js) with one untracked WIP file
+    (src/utils/splits.ts) alongside the existing src/utils/splits.js —
+    treat as an in-progress TS migration, not yet the project convention.
   Style: JavaScript (ESM), JSX for frontend components.
   Conventions: pnpm workspaces, Prisma for migrations/data access.
 
@@ -27,10 +37,10 @@ rules:
     - Keep tasks completable in one session
   apply:
     - Follow existing code patterns
-    tdd: false
-    test_command: ""
+    tdd: true
+    test_command: "pnpm --filter backend test && pnpm --filter frontend test"
   verify:
-    test_command: ""
+    test_command: "pnpm --filter backend test && pnpm --filter frontend test"
     build_command: "pnpm -r run build"
     coverage_threshold: 0
   archive:
@@ -49,21 +59,29 @@ delivery:
     may proceed directly.
 
 testing:
-  strict_tdd: false
-  runner: null
+  strict_tdd: true
+  runner: vitest
   reason: >
-    No test runner or test files detected in any workspace package.
-    TDD cannot be enforced. Consider adding vitest (frontend) and
-    a test framework for backend before enabling strict TDD.
+    Vitest is configured and working in both apps/backend and apps/frontend
+    (vitest.config.js in each, @vitest/coverage-v8 installed). Real test
+    files with real assertions exist and were run successfully on
+    2026-11-09: backend `pnpm --filter backend test` → 1 file / 11 tests
+    passed; frontend `pnpm --filter frontend test` → 2 files / 26 tests
+    passed. A real test command exists and red-green-refactor can be
+    reasonably enforced, so Strict TDD Mode is now ACTIVE (was `false` at
+    2026-06-05 init, when no runner existed yet).
   layers:
-    unit: false
+    unit: true
     integration: false
     e2e: false
-  coverage: false
-  linter: ESLint (frontend only)
-  type_checker: TypeScript available in devDeps (not used — backend is .js)
+  coverage: true
+  linter: ESLint (frontend only, eslint.config.js — no lint script/config in backend)
+  type_checker: TypeScript devDeps present on both apps; no tsconfig.json in
+    backend yet — backend is still plain JS with one WIP untracked .ts file
+    (src/utils/splits.ts) suggesting an in-progress migration
   formatter: null
 
 # Marker for tooling — do not edit manually
 initialized_at: "2026-06-05"
+reinitialized_at: "2026-11-09"
 initialized_by: sdd-init (gentle-ai)
