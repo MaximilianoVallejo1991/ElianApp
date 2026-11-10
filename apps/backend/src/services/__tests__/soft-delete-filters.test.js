@@ -13,6 +13,13 @@ import {
   finalClosure,
 } from '../closure.service.js';
 import { calculateGroupBalances } from '../balance.service.js';
+import {
+  listPeriods,
+  getPeriodDetails,
+  getPeriodBalances,
+  getPeriodExpenses,
+  getPeriodPayments,
+} from '../period.service.js';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -153,5 +160,110 @@ describe('balance.service.js — soft-deleted payments excluded from paymentWher
       where: { groupId, status: 'ACCEPTED', deletedAt: null, periodId },
       select: { fromUserId: true, toUserId: true, amount: true },
     });
+  });
+});
+
+describe('period.service.js — soft-deleted expenses and payments excluded', () => {
+  const groupId = 'group-1';
+  const periodId = 'period-1';
+  const userId = 'user-1';
+
+  it('listPeriods filters _count relations and excludes soft-deleted payments from settlement counts', async () => {
+    prisma.groupMember.findUnique.mockResolvedValue({ status: 'ACTIVE' });
+    prisma.period.findMany.mockResolvedValue([
+      {
+        id: periodId,
+        status: 'CLOSED',
+        isCurrent: false,
+        startedAt: null,
+        closedAt: new Date(),
+        createdAt: new Date(),
+        _count: { expenses: 2, payments: 1 },
+      },
+    ]);
+    prisma.payment.count.mockResolvedValue(0);
+
+    await listPeriods(groupId, userId);
+
+    expect(prisma.period.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({
+          _count: {
+            select: {
+              expenses: { where: { deletedAt: null } },
+              payments: { where: { deletedAt: null } },
+            },
+          },
+        }),
+      }),
+    );
+
+    for (const call of prisma.payment.count.mock.calls) {
+      expect(call[0].where.periodId).toBe(periodId);
+      expect(call[0].where.deletedAt).toBeNull();
+    }
+    expect(prisma.payment.count).toHaveBeenCalledTimes(2);
+  });
+
+  it('getPeriodDetails filters _count relations to exclude soft-deleted records', async () => {
+    prisma.groupMember.findUnique.mockResolvedValue({ status: 'ACTIVE' });
+    prisma.period.findFirst.mockResolvedValue({
+      id: periodId,
+      groupId,
+      _count: { expenses: 0, payments: 0 },
+    });
+
+    await getPeriodDetails(periodId, groupId, userId);
+
+    expect(prisma.period.findFirst).toHaveBeenCalledWith({
+      where: { id: periodId, groupId },
+      include: {
+        _count: {
+          select: {
+            expenses: { where: { deletedAt: null } },
+            payments: { where: { deletedAt: null } },
+          },
+        },
+      },
+    });
+  });
+
+  it('getPeriodBalances excludes soft-deleted ACCEPTED payments', async () => {
+    prisma.groupMember.findUnique.mockResolvedValue({ status: 'ACTIVE' });
+    prisma.period.findFirst.mockResolvedValue({ id: periodId, groupId, status: 'OPEN' });
+    prisma.groupMember.findMany.mockResolvedValue([]);
+    prisma.expense.findMany.mockResolvedValue([]);
+    prisma.payment.findMany.mockResolvedValue([]);
+
+    await getPeriodBalances(periodId, groupId, userId);
+
+    expect(prisma.payment.findMany).toHaveBeenCalledWith({
+      where: { periodId, status: 'ACCEPTED', deletedAt: null },
+      select: { fromUserId: true, toUserId: true, amount: true },
+    });
+  });
+
+  it('getPeriodExpenses excludes soft-deleted expenses', async () => {
+    prisma.groupMember.findUnique.mockResolvedValue({ status: 'ACTIVE' });
+    prisma.period.findFirst.mockResolvedValue({ id: periodId, groupId });
+    prisma.expense.findMany.mockResolvedValue([]);
+
+    await getPeriodExpenses(periodId, groupId, userId);
+
+    expect(prisma.expense.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { periodId, deletedAt: null } }),
+    );
+  });
+
+  it('getPeriodPayments excludes soft-deleted payments', async () => {
+    prisma.groupMember.findUnique.mockResolvedValue({ status: 'ACTIVE' });
+    prisma.period.findFirst.mockResolvedValue({ id: periodId, groupId });
+    prisma.payment.findMany.mockResolvedValue([]);
+
+    await getPeriodPayments(periodId, groupId, userId);
+
+    expect(prisma.payment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { periodId, deletedAt: null } }),
+    );
   });
 });
