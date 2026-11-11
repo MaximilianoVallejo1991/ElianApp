@@ -292,26 +292,38 @@ export async function acceptPayment(paymentId, userId) {
     );
   }
 
-  // Payment must be PENDING
+  // Fast path: a clearly non-PENDING payment fails here with the same code
+  // the guard below would produce. The guard is the authoritative check.
   if (payment.status !== 'PENDING') {
-    throw new AppError(
-      'INVALID_OPERATION',
-      400,
-      'Payment is not in PENDING status',
-    );
+    throw new AppError('NOT_PENDING', 409, 'Payment is not in PENDING status');
   }
 
-  return prisma.payment.update({
-    where: { id: paymentId },
-    data: { status: 'ACCEPTED' },
-    include: {
-      fromUser: {
-        select: { id: true, email: true, nickName: true },
+  return prisma.$transaction(async (tx) => {
+    // Atomic guard: re-assert PENDING inside the write. A concurrent caller
+    // that passed the same read-check above loses here with count 0.
+    const guard = await tx.payment.updateMany({
+      where: { id: paymentId, status: 'PENDING' },
+      data: { status: 'ACCEPTED' },
+    });
+
+    if (guard.count !== 1) {
+      throw new AppError('NOT_PENDING', 409, 'Payment is not in PENDING status');
+    }
+
+    // Our write holds the row lock until commit, so this read returns our
+    // own transition — `updateMany` cannot return the row itself, and
+    // supports no `include`. Same include as before.
+    return tx.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        fromUser: {
+          select: { id: true, email: true, nickName: true },
+        },
+        toUser: {
+          select: { id: true, email: true, nickName: true },
+        },
       },
-      toUser: {
-        select: { id: true, email: true, nickName: true },
-      },
-    },
+    });
   });
 }
 
@@ -351,28 +363,40 @@ export async function rejectPayment(paymentId, userId, rejectionReason) {
     );
   }
 
-  // Payment must be PENDING
+  // Fast path: a clearly non-PENDING payment fails here with the same code
+  // the guard below would produce. The guard is the authoritative check.
   if (payment.status !== 'PENDING') {
-    throw new AppError(
-      'INVALID_OPERATION',
-      400,
-      'Payment is not in PENDING status',
-    );
+    throw new AppError('NOT_PENDING', 409, 'Payment is not in PENDING status');
   }
 
-  return prisma.payment.update({
-    where: { id: paymentId },
-    data: {
-      status: 'REJECTED',
-      rejectionReason: rejectionReason || null,
-    },
-    include: {
-      fromUser: {
-        select: { id: true, email: true, nickName: true },
+  return prisma.$transaction(async (tx) => {
+    // Atomic guard: re-assert PENDING inside the write. A concurrent caller
+    // that passed the same read-check above loses here with count 0.
+    const guard = await tx.payment.updateMany({
+      where: { id: paymentId, status: 'PENDING' },
+      data: {
+        status: 'REJECTED',
+        rejectionReason: rejectionReason || null,
       },
-      toUser: {
-        select: { id: true, email: true, nickName: true },
+    });
+
+    if (guard.count !== 1) {
+      throw new AppError('NOT_PENDING', 409, 'Payment is not in PENDING status');
+    }
+
+    // Our write holds the row lock until commit, so this read returns our
+    // own transition — `updateMany` cannot return the row itself, and
+    // supports no `include`. Same include as before.
+    return tx.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        fromUser: {
+          select: { id: true, email: true, nickName: true },
+        },
+        toUser: {
+          select: { id: true, email: true, nickName: true },
+        },
       },
-    },
+    });
   });
 }

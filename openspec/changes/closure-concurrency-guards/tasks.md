@@ -60,13 +60,13 @@ Deliberately NOT fixed (owner-confirmed, accepted): the guard collapsing "row de
 
 ## Phase 4: Payment Guards — PR 3 `[backend]`
 
-- [ ] 4.1 [RED] `payment-concurrency.test.js`: concurrent accept+accept → 1 `ACCEPTED` (with `fromUser`/`toUser`), 1 `NOT_PENDING` 409
-- [ ] 4.2 [RED] Structural: `status: 'PENDING'` in `where`; `payment.update` never called
-- [ ] 4.3 [GREEN] `payment.service.js` `acceptPayment` (L296-315): pre-check throws `NOT_PENDING` 409 (was `INVALID_OPERATION` 400); guarded `updateMany` + `findUnique` (same includes) in `$transaction`
-- [ ] 4.4 [RED] `payment-concurrency.test.js`: concurrent accept+reject → exactly one terminal status, loser's response matches final DB state
-- [ ] 4.5 [GREEN] `payment.service.js` `rejectPayment` (L354-377): identical pattern, `data: { status: 'REJECTED', rejectionReason }`
-- [ ] 4.6 [GREEN] `errors.js`: docblock — register `INVALID_OPERATION`; note `NOT_PENDING` now live at 409
-- [ ] 4.7 [Collateral][GREEN] `soft-delete-filters.test.js` L331/353: `payment.update` "not called" → `payment.updateMany`; L336-343/358-366: stub/assertions → `payment.updateMany` + `payment.findUnique` sequenced `mockResolvedValueOnce` (pre-check read, then post-write read with `fromUser`/`toUser`)
+- [x] 4.1 [RED] `payment-concurrency.test.js`: concurrent accept+accept → 1 `ACCEPTED` (with `fromUser`/`toUser`), 1 `NOT_PENDING` 409
+- [x] 4.2 [RED] Structural: `status: 'PENDING'` in `where`; `payment.update` never called
+- [x] 4.3 [GREEN] `payment.service.js` `acceptPayment` (L296-315): pre-check throws `NOT_PENDING` 409 (was `INVALID_OPERATION` 400); guarded `updateMany` + `findUnique` (same includes) in `$transaction`
+- [x] 4.4 [RED] `payment-concurrency.test.js`: concurrent accept+reject → exactly one terminal status, loser's response matches final DB state
+- [x] 4.5 [GREEN] `payment.service.js` `rejectPayment` (L354-377): identical pattern, `data: { status: 'REJECTED', rejectionReason }`
+- [x] 4.6 [GREEN] `errors.js`: docblock — register `INVALID_OPERATION`; note `NOT_PENDING` now live at 409
+- [x] 4.7 [Collateral][GREEN] `soft-delete-filters.test.js` L331/353: `payment.update` "not called" → `payment.updateMany`; L336-343/358-366: stub/assertions → `payment.updateMany` + `payment.findUnique` sequenced `mockResolvedValueOnce` (pre-check read, then post-write read with `fromUser`/`toUser`)
 
 ## Phase 5: DB Defense-in-Depth — PR 4 `[backend]`
 
