@@ -292,14 +292,28 @@ export async function partialClosure(groupId, userId) {
     );
   }
 
-  // Check all balances are zero
+  // Check all balances are zero. This read is not re-verified inside the
+  // transaction below — a payment accepted in the gap between this check
+  // and the guard committing could make the balance non-zero again before
+  // close. Accepted staleness, same tradeoff as ADR-6: the guard prevents
+  // the corrupting outcome (two `isCurrent: true` periods), not every
+  // possible stale read in this function.
   await requireZeroBalances(period.id, groupId);
 
   // Atomic: close current period + create new open period
   return prisma.$transaction(async (tx) => {
-    // Close current period
-    await tx.period.update({
-      where: { id: period.id },
+    // This guard must run before `period.create` below — a losing call's
+    // count is 0 and the whole tx rolls back, so a second `isCurrent: true`
+    // row is never created. Re-asserting `status: 'CLOSING'` inside the
+    // write (not a separate read) closes the status-based TOCTOU race two
+    // concurrent requests could otherwise both pass through the pre-read
+    // check above; it does not re-check balances (see the comment on
+    // requireZeroBalances above). The ordering itself is enforced by this
+    // function's test, not by this comment — see
+    // `closure-concurrency.test.js`'s `invocationCallOrder` assertion,
+    // which fails if a future edit moves another write ahead of this one.
+    const guard = await tx.period.updateMany({
+      where: { id: period.id, status: 'CLOSING' },
       data: {
         status: 'CLOSED',
         isCurrent: false,
@@ -307,16 +321,21 @@ export async function partialClosure(groupId, userId) {
       },
     });
 
-    // Create new OPEN period
-    const newPeriod = await tx.period.create({
+    if (guard.count !== 1) {
+      throw new AppError('CLOSURE_BLOCKED', 409, 'Period is no longer in CLOSING status');
+    }
+
+    // Create new OPEN period. No follow-up read: `create` already returns
+    // the row we need, and this function never touches `Group` (no
+    // `Group.currentPeriodId` column exists — current-period tracking is
+    // `Period.isCurrent` only).
+    return tx.period.create({
       data: {
         groupId,
         status: 'OPEN',
         isCurrent: true,
       },
     });
-
-    return newPeriod;
   });
 }
 

@@ -16,7 +16,14 @@ import { vi } from 'vitest';
  * or a method — rather than redefining a bespoke mock inline in a test
  * file. That is what keeps it reusable. `expense.create`/`expense.update`
  * and the `expenseSplit` model were added in PR 3 for
- * `createExpense`/`updateExpense` coverage.
+ * `createExpense`/`updateExpense` coverage. `period.updateMany` and
+ * `payment.updateMany` were both stubbed here in PR 1 of the
+ * `closure-concurrency-guards` change for the later closure/payment
+ * atomic-guard PRs to reuse without touching this file again — as of
+ * PR 1, only `partialClosure` actually calls `period.updateMany`.
+ * `payment.service.js` still calls the unguarded `payment.update`
+ * until PR 3 lands; do not assume `payment.updateMany` being stubbed
+ * here means payments are already guarded.
  */
 const prisma = {
   group: {
@@ -32,6 +39,7 @@ const prisma = {
     findMany: vi.fn(),
     findUnique: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
     create: vi.fn(),
   },
   expense: {
@@ -54,6 +62,7 @@ const prisma = {
     findMany: vi.fn(),
     findUnique: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
   },
 };
 
