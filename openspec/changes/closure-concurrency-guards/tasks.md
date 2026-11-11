@@ -68,6 +68,8 @@ Deliberately NOT fixed (owner-confirmed, accepted): the guard collapsing "row de
 - [x] 4.6 [GREEN] `errors.js`: docblock — register `INVALID_OPERATION`; note `NOT_PENDING` now live at 409
 - [x] 4.7 [Collateral][GREEN] `soft-delete-filters.test.js` L331/353: `payment.update` "not called" → `payment.updateMany`; L336-343/358-366: stub/assertions → `payment.updateMany` + `payment.findUnique` sequenced `mockResolvedValueOnce` (pre-check read, then post-write read with `fromUser`/`toUser`)
 
+**Addendum (PR 3, post-apply code review)** — `acceptPayment`/`rejectPayment`'s guard `where` only re-asserted `status: 'PENDING'`, not `deletedAt: null` — a payment soft-deleted (no status check in `deletePayment`) between the pre-check read and the transaction committing could still be atomically transitioned. Same bug class as PR 2's `isCurrent` omission: the guard didn't carry over an existing precondition into its atomic form. Fixed with `deletedAt: null` added to both guards' `where`, RED→GREEN via a structural assertion; 2 pre-existing exact-match tests in `soft-delete-filters.test.js` updated to match the new `where` shape. Same generic `NOT_PENDING` 409 on guard failure — consistent with the already-accepted decision not to distinguish "row changed" from "row gone" in this cycle's closure guards.
+
 ## Phase 5: DB Defense-in-Depth — PR 4 `[backend]`
 
 - [ ] 5.1 `schema.prisma`: add `previewFeatures = ["partialIndexes"]` to `generator client`
