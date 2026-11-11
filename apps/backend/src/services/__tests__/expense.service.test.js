@@ -154,6 +154,9 @@ describe('updateExpense — partial-update splits fallback (Fix A companion)', (
       { userId: 'u1', amount: 60, percentage: 60 },
       { userId: 'u2', amount: 40, percentage: 40 },
     ]);
+    // Both u1 and u2 are still active members — the new membership filter
+    // (Bug 1 fix) is a no-op in this scenario.
+    prisma.groupMember.findMany.mockResolvedValue([{ userId: 'u1' }, { userId: 'u2' }]);
     prisma.expenseSplit.deleteMany.mockResolvedValue({ count: 2 });
     prisma.expense.update.mockResolvedValue({ id: expenseId });
 
@@ -174,6 +177,29 @@ describe('updateExpense — partial-update splits fallback (Fix A companion)', (
         }),
       }),
     );
+  });
+
+  it('(Bug 1 regression) does NOT resurrect a PERCENTAGE split for a member who has since left the group', async () => {
+    // PERCENTAGE expense A:60%/B:40%; B later leaves the group; a
+    // `PUT { amount: 200 }` (no splits) must reject instead of silently
+    // reconstructing B's stale 40% from the persisted ExpenseSplit row.
+    prisma.expense.findUnique.mockResolvedValue({
+      ...baseExisting,
+      amount: 100,
+      splitType: 'PERCENTAGE',
+    });
+    prisma.group.findUnique.mockResolvedValue({ ownerId: 'owner-1' });
+    prisma.expenseSplit.findMany.mockResolvedValue([
+      { userId: 'u1', amount: 60, percentage: 60 },
+      { userId: 'u2', amount: 40, percentage: 40 },
+    ]);
+    // Only u1 is still an active member — u2 left the group.
+    prisma.groupMember.findMany.mockResolvedValue([{ userId: 'u1' }]);
+
+    await expect(updateExpense(expenseId, { amount: 200 }, userId)).rejects.toMatchObject({
+      status: 400,
+    });
+    expect(prisma.expense.update).not.toHaveBeenCalled();
   });
 
   it('does not fall back when data.splits is explicitly provided alongside a new amount', async () => {
@@ -235,5 +261,87 @@ describe('updateExpense — partial-update splits fallback (Fix A companion)', (
         }),
       }),
     );
+  });
+
+  it('(Bug 2 regression) preserves the ORIGINAL EQUAL participant subset on a partial update instead of re-splitting across every current active member', async () => {
+    // EQUAL expense originally created with a subset of 2 out of 5 group
+    // members (u1, u2). A `PUT { amount }`-only update must still split
+    // only between u1/u2 — not recalculate across all 5 current members.
+    prisma.expense.findUnique.mockResolvedValue({
+      ...baseExisting,
+      amount: 100,
+      splitType: 'EQUAL',
+    });
+    prisma.group.findUnique.mockResolvedValue({ ownerId: 'owner-1' });
+    prisma.expenseSplit.findMany.mockResolvedValue([
+      { userId: 'u1', amount: 50, percentage: null },
+      { userId: 'u2', amount: 50, percentage: null },
+    ]);
+    // The group now has 5 active members — u3/u4/u5 never owed anything on
+    // this expense and must not be assigned a share of it.
+    prisma.groupMember.findMany.mockResolvedValue([
+      { userId: 'u1' },
+      { userId: 'u2' },
+      { userId: 'u3' },
+      { userId: 'u4' },
+      { userId: 'u5' },
+    ]);
+    prisma.expenseSplit.deleteMany.mockResolvedValue({ count: 2 });
+    prisma.expense.update.mockResolvedValue({ id: expenseId });
+
+    await updateExpense(expenseId, { amount: 300 }, userId);
+
+    expect(prisma.expense.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          splits: {
+            create: [
+              { userId: 'u1', amount: 150, percentage: null },
+              { userId: 'u2', amount: 150, percentage: null },
+            ],
+          },
+        }),
+      }),
+    );
+  });
+
+  it('(Bug 2 regression) rejects an EQUAL partial update when every original participant has since left the group', async () => {
+    prisma.expense.findUnique.mockResolvedValue({
+      ...baseExisting,
+      amount: 100,
+      splitType: 'EQUAL',
+    });
+    prisma.group.findUnique.mockResolvedValue({ ownerId: 'owner-1' });
+    prisma.expenseSplit.findMany.mockResolvedValue([
+      { userId: 'u1', amount: 50, percentage: null },
+      { userId: 'u2', amount: 50, percentage: null },
+    ]);
+    // Neither original participant is active anymore.
+    prisma.groupMember.findMany.mockResolvedValue([{ userId: 'u3' }]);
+
+    await expect(updateExpense(expenseId, { amount: 300 }, userId)).rejects.toMatchObject({
+      code: 'INVALID_PARTICIPANTS',
+      status: 400,
+    });
+    expect(prisma.expense.update).not.toHaveBeenCalled();
+  });
+
+  it('(Bug 3 regression) does NOT query persisted ExpenseSplit rows for a COLLECTIVE partial update', async () => {
+    // COLLECTIVE expenses are not recalculated through this fallback —
+    // computeSplits has no COLLECTIVE branch — so the splits reconstruction
+    // query would be entirely wasted here.
+    prisma.expense.findUnique.mockResolvedValue({
+      ...baseExisting,
+      amount: 100,
+      splitType: 'COLLECTIVE',
+      participantIds: ['u1', 'u2'],
+    });
+    prisma.group.findUnique.mockResolvedValue({ ownerId: 'owner-1' });
+
+    await expect(updateExpense(expenseId, { amount: 500 }, userId)).rejects.toMatchObject({
+      code: 'INVALID_SPLITS',
+      status: 400,
+    });
+    expect(prisma.expenseSplit.findMany).not.toHaveBeenCalled();
   });
 });
