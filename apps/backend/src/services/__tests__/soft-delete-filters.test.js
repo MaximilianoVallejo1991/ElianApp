@@ -324,51 +324,89 @@ describe('payment.service.js — acceptPayment/rejectPayment reject soft-deleted
     };
   }
 
-  it('acceptPayment throws PAYMENT_NOT_FOUND for a soft-deleted payment and never calls update', async () => {
+  it('acceptPayment throws PAYMENT_NOT_FOUND for a soft-deleted payment and never calls updateMany', async () => {
     prisma.payment.findUnique.mockResolvedValue(softDeletedPayment());
 
     await expect(acceptPayment(paymentId, receiverId)).rejects.toMatchObject({
       code: 'PAYMENT_NOT_FOUND',
       status: 404,
     });
-    expect(prisma.payment.update).not.toHaveBeenCalled();
+    expect(prisma.payment.updateMany).not.toHaveBeenCalled();
   });
 
   it('acceptPayment still accepts a non-deleted PENDING payment (triangulation)', async () => {
-    prisma.payment.findUnique.mockResolvedValue(activePayment());
-    prisma.payment.update.mockResolvedValue({ id: paymentId, status: 'ACCEPTED' });
+    // Called twice: pre-check read (include: group), then the post-write
+    // follow-up read (include: fromUser/toUser) inside the transaction.
+    // `mockResolvedValueOnce` sequencing is mandatory here — a plain
+    // `mockResolvedValue` would return the pre-check row for both calls and
+    // silently drop fromUser/toUser with no test failing (design.md's
+    // flagged gotcha for this change).
+    prisma.payment.findUnique
+      .mockResolvedValueOnce(activePayment())
+      .mockResolvedValueOnce({
+        id: paymentId,
+        status: 'ACCEPTED',
+        fromUser: { id: 'user-1' },
+        toUser: { id: receiverId },
+      });
+    prisma.payment.updateMany.mockResolvedValue({ count: 1 });
 
     const result = await acceptPayment(paymentId, receiverId);
 
-    expect(result).toEqual({ id: paymentId, status: 'ACCEPTED' });
-    expect(prisma.payment.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: paymentId }, data: { status: 'ACCEPTED' } }),
+    expect(result).toEqual({
+      id: paymentId,
+      status: 'ACCEPTED',
+      fromUser: { id: 'user-1' },
+      toUser: { id: receiverId },
+    });
+    expect(prisma.payment.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: paymentId, status: 'PENDING', deletedAt: null },
+        data: { status: 'ACCEPTED' },
+      }),
     );
+    expect(prisma.payment.update).not.toHaveBeenCalled();
   });
 
-  it('rejectPayment throws PAYMENT_NOT_FOUND for a soft-deleted payment and never calls update', async () => {
+  it('rejectPayment throws PAYMENT_NOT_FOUND for a soft-deleted payment and never calls updateMany', async () => {
     prisma.payment.findUnique.mockResolvedValue(softDeletedPayment());
 
     await expect(rejectPayment(paymentId, receiverId)).rejects.toMatchObject({
       code: 'PAYMENT_NOT_FOUND',
       status: 404,
     });
-    expect(prisma.payment.update).not.toHaveBeenCalled();
+    expect(prisma.payment.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejectPayment still rejects a non-deleted PENDING payment (triangulation)', async () => {
-    prisma.payment.findUnique.mockResolvedValue(activePayment());
-    prisma.payment.update.mockResolvedValue({ id: paymentId, status: 'REJECTED' });
+    // Same double-findUnique sequencing gotcha as acceptPayment above.
+    prisma.payment.findUnique
+      .mockResolvedValueOnce(activePayment())
+      .mockResolvedValueOnce({
+        id: paymentId,
+        status: 'REJECTED',
+        rejectionReason: 'wrong amount',
+        fromUser: { id: 'user-1' },
+        toUser: { id: receiverId },
+      });
+    prisma.payment.updateMany.mockResolvedValue({ count: 1 });
 
     const result = await rejectPayment(paymentId, receiverId, 'wrong amount');
 
-    expect(result).toEqual({ id: paymentId, status: 'REJECTED' });
-    expect(prisma.payment.update).toHaveBeenCalledWith(
+    expect(result).toEqual({
+      id: paymentId,
+      status: 'REJECTED',
+      rejectionReason: 'wrong amount',
+      fromUser: { id: 'user-1' },
+      toUser: { id: receiverId },
+    });
+    expect(prisma.payment.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: paymentId },
+        where: { id: paymentId, status: 'PENDING', deletedAt: null },
         data: { status: 'REJECTED', rejectionReason: 'wrong amount' },
       }),
     );
+    expect(prisma.payment.update).not.toHaveBeenCalled();
   });
 
   it('acceptPayment and rejectPayment both reject using the AppError class', async () => {

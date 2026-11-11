@@ -60,13 +60,15 @@ Deliberately NOT fixed (owner-confirmed, accepted): the guard collapsing "row de
 
 ## Phase 4: Payment Guards — PR 3 `[backend]`
 
-- [ ] 4.1 [RED] `payment-concurrency.test.js`: concurrent accept+accept → 1 `ACCEPTED` (with `fromUser`/`toUser`), 1 `NOT_PENDING` 409
-- [ ] 4.2 [RED] Structural: `status: 'PENDING'` in `where`; `payment.update` never called
-- [ ] 4.3 [GREEN] `payment.service.js` `acceptPayment` (L296-315): pre-check throws `NOT_PENDING` 409 (was `INVALID_OPERATION` 400); guarded `updateMany` + `findUnique` (same includes) in `$transaction`
-- [ ] 4.4 [RED] `payment-concurrency.test.js`: concurrent accept+reject → exactly one terminal status, loser's response matches final DB state
-- [ ] 4.5 [GREEN] `payment.service.js` `rejectPayment` (L354-377): identical pattern, `data: { status: 'REJECTED', rejectionReason }`
-- [ ] 4.6 [GREEN] `errors.js`: docblock — register `INVALID_OPERATION`; note `NOT_PENDING` now live at 409
-- [ ] 4.7 [Collateral][GREEN] `soft-delete-filters.test.js` L331/353: `payment.update` "not called" → `payment.updateMany`; L336-343/358-366: stub/assertions → `payment.updateMany` + `payment.findUnique` sequenced `mockResolvedValueOnce` (pre-check read, then post-write read with `fromUser`/`toUser`)
+- [x] 4.1 [RED] `payment-concurrency.test.js`: concurrent accept+accept → 1 `ACCEPTED` (with `fromUser`/`toUser`), 1 `NOT_PENDING` 409
+- [x] 4.2 [RED] Structural: `status: 'PENDING'` in `where`; `payment.update` never called
+- [x] 4.3 [GREEN] `payment.service.js` `acceptPayment` (L296-315): pre-check throws `NOT_PENDING` 409 (was `INVALID_OPERATION` 400); guarded `updateMany` + `findUnique` (same includes) in `$transaction`
+- [x] 4.4 [RED] `payment-concurrency.test.js`: concurrent accept+reject → exactly one terminal status, loser's response matches final DB state
+- [x] 4.5 [GREEN] `payment.service.js` `rejectPayment` (L354-377): identical pattern, `data: { status: 'REJECTED', rejectionReason }`
+- [x] 4.6 [GREEN] `errors.js`: docblock — register `INVALID_OPERATION`; note `NOT_PENDING` now live at 409
+- [x] 4.7 [Collateral][GREEN] `soft-delete-filters.test.js` L331/353: `payment.update` "not called" → `payment.updateMany`; L336-343/358-366: stub/assertions → `payment.updateMany` + `payment.findUnique` sequenced `mockResolvedValueOnce` (pre-check read, then post-write read with `fromUser`/`toUser`)
+
+**Addendum (PR 3, post-apply code review)** — `acceptPayment`/`rejectPayment`'s guard `where` only re-asserted `status: 'PENDING'`, not `deletedAt: null` — a payment soft-deleted (no status check in `deletePayment`) between the pre-check read and the transaction committing could still be atomically transitioned. Same bug class as PR 2's `isCurrent` omission: the guard didn't carry over an existing precondition into its atomic form. Fixed with `deletedAt: null` added to both guards' `where`, RED→GREEN via a structural assertion; 2 pre-existing exact-match tests in `soft-delete-filters.test.js` updated to match the new `where` shape. Same generic `NOT_PENDING` 409 on guard failure — consistent with the already-accepted decision not to distinguish "row changed" from "row gone" in this cycle's closure guards.
 
 ## Phase 5: DB Defense-in-Depth — PR 4 `[backend]`
 
@@ -74,6 +76,10 @@ Deliberately NOT fixed (owner-confirmed, accepted): the guard collapsing "row de
 - [ ] 5.2 `schema.prisma`: add `@@unique([groupId], where: { isCurrent: true })` on `Period`
 - [ ] 5.3 Run `npx prisma migrate dev --name add_period_current_unique_constraint`; verify generated SQL is a plain `CREATE UNIQUE INDEX` (no `CONCURRENTLY`), commit as-is
 - [ ] 5.4 Note (not scripted): pre-flight duplicate-`isCurrent` check from design.md before applying in any real environment
+
+### Deferred finding (PR 3 verify, pending investigation before archive)
+
+`closure.service.js` (untouched by this cycle) only blocks STATIC closure on PENDING payments — its own code comment says "REJECTED payments are historical, not blocking." But the `payment-acceptance` spec (inherited from Cycle 1) has a "Rejection Blocks STATIC Closure" requirement, with zero test coverage anywhere confirming either behavior. Not a concurrency bug, not caused by this cycle, not blocking any of the 4 PRs — owner decision: leave pending, investigate before archiving this change (unclear yet whether the code or the inherited spec is the stale one).
 
 ## Phase 6: Final Verification (after all 4 PRs merged)
 
