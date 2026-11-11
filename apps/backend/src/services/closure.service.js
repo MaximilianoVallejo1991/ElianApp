@@ -256,6 +256,7 @@ export async function completeClosure(groupId, userId) {
       where: { id: period.id, status: 'CLOSING' },
       data: {
         status: 'CLOSED',
+        isCurrent: false,
         closedAt: new Date(),
       },
     });

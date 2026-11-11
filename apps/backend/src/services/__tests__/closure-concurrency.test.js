@@ -260,6 +260,20 @@ describe('completeClosure — concurrency guard', () => {
     // No "simplifying" this back into a JS `if` plus `update({ where: { id } })`.
     expect(prisma.period.update).not.toHaveBeenCalled();
   });
+
+  it('clears isCurrent so the group is not left permanently pointing at a CLOSED period', async () => {
+    mockHappyPathUpTo(async () => ({ id: periodId, status: 'CLOSING' }));
+    prisma.period.updateMany.mockResolvedValue({ count: 1 });
+    prisma.period.findUnique.mockResolvedValue({ id: periodId, status: 'CLOSED', isCurrent: false });
+
+    await completeClosure(groupId, ownerId);
+
+    expect(prisma.period.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ isCurrent: false }),
+      }),
+    );
+  });
 });
 
 describe('finalClosure — concurrency guard', () => {
