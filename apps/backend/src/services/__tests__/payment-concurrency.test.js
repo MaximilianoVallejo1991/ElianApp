@@ -118,7 +118,7 @@ describe('acceptPayment — concurrency guard', () => {
 
     expect(prisma.payment.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ id: paymentId, status: 'PENDING' }),
+        where: expect.objectContaining({ id: paymentId, status: 'PENDING', deletedAt: null }),
         data: expect.objectContaining({ status: 'ACCEPTED' }),
       }),
     );
@@ -190,7 +190,7 @@ describe('rejectPayment — concurrency guard', () => {
 
     expect(prisma.payment.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ id: paymentId, status: 'PENDING' }),
+        where: expect.objectContaining({ id: paymentId, status: 'PENDING', deletedAt: null }),
         data: expect.objectContaining({ status: 'REJECTED', rejectionReason: 'wrong amount' }),
       }),
     );

@@ -302,7 +302,7 @@ export async function acceptPayment(paymentId, userId) {
     // Atomic guard: re-assert PENDING inside the write. A concurrent caller
     // that passed the same read-check above loses here with count 0.
     const guard = await tx.payment.updateMany({
-      where: { id: paymentId, status: 'PENDING' },
+      where: { id: paymentId, status: 'PENDING', deletedAt: null },
       data: { status: 'ACCEPTED' },
     });
 
@@ -373,7 +373,7 @@ export async function rejectPayment(paymentId, userId, rejectionReason) {
     // Atomic guard: re-assert PENDING inside the write. A concurrent caller
     // that passed the same read-check above loses here with count 0.
     const guard = await tx.payment.updateMany({
-      where: { id: paymentId, status: 'PENDING' },
+      where: { id: paymentId, status: 'PENDING', deletedAt: null },
       data: {
         status: 'REJECTED',
         rejectionReason: rejectionReason || null,

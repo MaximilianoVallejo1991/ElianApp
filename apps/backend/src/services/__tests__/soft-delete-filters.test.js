@@ -361,7 +361,7 @@ describe('payment.service.js — acceptPayment/rejectPayment reject soft-deleted
     });
     expect(prisma.payment.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: paymentId, status: 'PENDING' },
+        where: { id: paymentId, status: 'PENDING', deletedAt: null },
         data: { status: 'ACCEPTED' },
       }),
     );
@@ -402,7 +402,7 @@ describe('payment.service.js — acceptPayment/rejectPayment reject soft-deleted
     });
     expect(prisma.payment.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: paymentId, status: 'PENDING' },
+        where: { id: paymentId, status: 'PENDING', deletedAt: null },
         data: { status: 'REJECTED', rejectionReason: 'wrong amount' },
       }),
     );
