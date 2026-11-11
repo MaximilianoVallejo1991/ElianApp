@@ -11,10 +11,12 @@ import { vi } from 'vitest';
  * `mockResolvedValue(...)` / `toHaveBeenCalledWith(...)` assertions.
  *
  * This is the shared seam for every service-level unit test
- * (`soft-delete-filters.test.js` today; `expense.service.test.js` and
- * `item-reporting.service.test.js` reuse it in a later PR). Extend this
- * object — add a model or a method — rather than redefining a bespoke
- * mock inline in a test file. That is what keeps it reusable.
+ * (`soft-delete-filters.test.js`, `expense.service.test.js`,
+ * `item-reporting.service.test.js`). Extend this object — add a model
+ * or a method — rather than redefining a bespoke mock inline in a test
+ * file. That is what keeps it reusable. `expense.create`/`expense.update`
+ * and the `expenseSplit` model were added in PR 3 for
+ * `createExpense`/`updateExpense` coverage.
  */
 const prisma = {
   group: {
@@ -36,6 +38,13 @@ const prisma = {
     count: vi.fn(),
     findMany: vi.fn(),
     findUnique: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+  },
+  expenseSplit: {
+    findMany: vi.fn(),
+    deleteMany: vi.fn(),
+    createMany: vi.fn(),
   },
   expenseItem: {
     upsert: vi.fn(),
