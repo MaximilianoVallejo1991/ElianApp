@@ -297,9 +297,14 @@ export async function partialClosure(groupId, userId) {
 
   // Atomic: close current period + create new open period
   return prisma.$transaction(async (tx) => {
-    // Close current period
-    await tx.period.update({
-      where: { id: period.id },
+    // STATEMENT #1, non-negotiable: the guard must win or lose before any
+    // new period exists. A loser's count is 0 and the whole tx rolls back,
+    // so a second `isCurrent: true` row is never created. Re-asserting
+    // `status: 'CLOSING'` inside the write (not a separate read) is what
+    // closes the TOCTOU race two concurrent requests could otherwise both
+    // pass through the pre-read status check above.
+    const guard = await tx.period.updateMany({
+      where: { id: period.id, status: 'CLOSING' },
       data: {
         status: 'CLOSED',
         isCurrent: false,
@@ -307,16 +312,21 @@ export async function partialClosure(groupId, userId) {
       },
     });
 
-    // Create new OPEN period
-    const newPeriod = await tx.period.create({
+    if (guard.count !== 1) {
+      throw new AppError('CLOSURE_BLOCKED', 409, 'Period is no longer in CLOSING status');
+    }
+
+    // Create new OPEN period. No follow-up read: `create` already returns
+    // the row we need, and this function never touches `Group` (no
+    // `Group.currentPeriodId` column exists — current-period tracking is
+    // `Period.isCurrent` only).
+    return tx.period.create({
       data: {
         groupId,
         status: 'OPEN',
         isCurrent: true,
       },
     });
-
-    return newPeriod;
   });
 }
 

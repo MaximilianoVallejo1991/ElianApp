@@ -96,7 +96,7 @@ describe('closure.service.js — soft-deleted payments excluded', () => {
     prisma.groupMember.findMany.mockResolvedValue([]);
     prisma.expense.findMany.mockResolvedValue([]);
     prisma.payment.findMany.mockResolvedValue([]);
-    prisma.period.update.mockResolvedValue({ id: periodId, status: 'CLOSED' });
+    prisma.period.updateMany.mockResolvedValue({ count: 1 });
     prisma.period.create.mockResolvedValue({ id: 'period-2', status: 'OPEN' });
 
     await partialClosure(groupId, ownerId);

@@ -16,7 +16,10 @@ import { vi } from 'vitest';
  * or a method — rather than redefining a bespoke mock inline in a test
  * file. That is what keeps it reusable. `expense.create`/`expense.update`
  * and the `expenseSplit` model were added in PR 3 for
- * `createExpense`/`updateExpense` coverage.
+ * `createExpense`/`updateExpense` coverage. `period.updateMany` /
+ * `payment.updateMany` were added for the closure/payment concurrency
+ * guards (`closure-concurrency-guards` change) — atomic conditional
+ * updates replacing read-then-write state transitions.
  */
 const prisma = {
   group: {
@@ -32,6 +35,7 @@ const prisma = {
     findMany: vi.fn(),
     findUnique: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
     create: vi.fn(),
   },
   expense: {
@@ -54,6 +58,7 @@ const prisma = {
     findMany: vi.fn(),
     findUnique: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
   },
 };
 
