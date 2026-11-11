@@ -595,7 +595,30 @@ export async function updateExpense(expenseId, data, userId) {
       effectiveSplitsInput = effectiveSplitsInput ?? [];
     } else {
       // EQUAL / PERCENTAGE
-      const needsSplitsReconstruction = effectiveSplitsInput === undefined;
+
+      // Treat an explicit EMPTY participantIds the same as "omitted" when
+      // deciding whether to reconstruct membership. `computeSplits` itself
+      // already treats `participantIds: []` as equivalent to not-provided
+      // (falls back to every active member for EQUAL) — so
+      // `PUT { participantIds: [] }` must trigger the SAME reconstruction
+      // path as omitting the field entirely, or the empty array sails
+      // through untouched and `computeSplits` silently reassigns the whole
+      // expense to every active member instead of the original subset
+      // (third addendum, Fix 1 — same bug class as the `splits: []` fix
+      // above, for the `participantIds` field).
+      const participantIdsNotProvided =
+        !effectiveParticipantIds || effectiveParticipantIds.length === 0;
+
+      // Splits-CONTENT reconstruction only matters for PERCENTAGE — EQUAL
+      // ignores `splits` content entirely (neither `validateSplits` nor
+      // `computeSplits`' EQUAL branch ever reads it), so there is nothing to
+      // reconstruct for EQUAL. Excluding EQUAL here also means an EQUAL
+      // update with an explicit, non-empty `participantIds` skips the
+      // `expenseSplit.findMany` + `getActiveMemberIds` query pair entirely
+      // (third addendum, Fix 2) instead of running it just to build a
+      // `splits` array `computeSplits` throws away for EQUAL anyway.
+      const needsSplitsReconstruction =
+        effectiveSplitType !== 'EQUAL' && effectiveSplitsInput === undefined;
 
       // EQUAL always needs effectiveParticipantIds — it is EQUAL's only
       // source of membership. PERCENTAGE only needs it to SCOPE a
@@ -608,7 +631,7 @@ export async function updateExpense(expenseId, data, userId) {
       // only reconstruct participantIds when splits are ALSO being
       // reconstructed (i.e. both omitted together).
       const needsParticipantReconstruction =
-        effectiveParticipantIds === undefined &&
+        participantIdsNotProvided &&
         (effectiveSplitType === 'EQUAL' || needsSplitsReconstruction);
 
       if (needsParticipantReconstruction || needsSplitsReconstruction) {

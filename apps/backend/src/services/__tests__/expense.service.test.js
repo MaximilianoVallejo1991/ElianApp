@@ -428,6 +428,84 @@ describe('updateExpense — partial-update splits fallback (Fix A companion)', (
     );
   });
 
+  it('(Third addendum regression — Fix 1) PUT { amount, participantIds: [] } on an EQUAL expense must still preserve the original participant subset, not fall back to every active member', async () => {
+    // Same bug class as the second addendum's `splits: []` fix, but for
+    // `participantIds`: EQUAL expense originally split only between u1/u2 in
+    // a 5-member group. Sending the whole form shape — `participantIds: []`
+    // (not omitted, EMPTY) — must not bypass the participant-subset
+    // reconstruction. `computeSplits` itself already treats an empty
+    // participantIds array as "not provided" (falls back to every active
+    // member), so `updateExpense` must reconstruct BEFORE handing off,
+    // exactly as it does when participantIds is omitted entirely.
+    prisma.expense.findUnique.mockResolvedValue({
+      ...baseExisting,
+      amount: 100,
+      splitType: 'EQUAL',
+    });
+    prisma.group.findUnique.mockResolvedValue({ ownerId: 'owner-1' });
+    prisma.expenseSplit.findMany.mockResolvedValue([
+      { userId: 'u1', amount: 50, percentage: null },
+      { userId: 'u2', amount: 50, percentage: null },
+    ]);
+    // 5 active members today — u3/u4/u5 never owed anything on this expense.
+    prisma.groupMember.findMany.mockResolvedValue([
+      { userId: 'u1' },
+      { userId: 'u2' },
+      { userId: 'u3' },
+      { userId: 'u4' },
+      { userId: 'u5' },
+    ]);
+    prisma.expenseSplit.deleteMany.mockResolvedValue({ count: 2 });
+    prisma.expense.update.mockResolvedValue({ id: expenseId });
+
+    await updateExpense(expenseId, { amount: 300, participantIds: [] }, userId);
+
+    expect(prisma.expense.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          splits: {
+            create: [
+              { userId: 'u1', amount: 150, percentage: null },
+              { userId: 'u2', amount: 150, percentage: null },
+            ],
+          },
+        }),
+      }),
+    );
+  });
+
+  it('(Third addendum — Fix 2) skips the expenseSplit.findMany reconstruction query entirely for an EQUAL update with an explicit, non-empty participantIds', async () => {
+    // EQUAL expense currently split u1/u2. Supplying an explicit, non-empty
+    // participantIds (no `splits` in the body — EQUAL ignores splits
+    // content anyway) must NOT trigger the expenseSplit.findMany +
+    // getActiveMemberIds reconstruction query pair: that pair exists only to
+    // rebuild membership/content the caller already supplied directly.
+    prisma.expense.findUnique.mockResolvedValue({
+      ...baseExisting,
+      amount: 100,
+      splitType: 'EQUAL',
+    });
+    prisma.group.findUnique.mockResolvedValue({ ownerId: 'owner-1' });
+    prisma.expenseSplit.deleteMany.mockResolvedValue({ count: 2 });
+    prisma.expense.update.mockResolvedValue({ id: expenseId });
+
+    await updateExpense(expenseId, { participantIds: ['u1', 'u3'] }, userId);
+
+    expect(prisma.expenseSplit.findMany).not.toHaveBeenCalled();
+    expect(prisma.expense.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          splits: {
+            create: [
+              { userId: 'u1', amount: 50, percentage: null },
+              { userId: 'u3', amount: 50, percentage: null },
+            ],
+          },
+        }),
+      }),
+    );
+  });
+
   it('(Second addendum verification) an explicit participantIds matching the persisted PERCENTAGE splits round-trips unchanged — computeSplits re-filtering by the same participantIds is a no-op intersection', async () => {
     // Guards against double-filtering regressions: updateExpense already
     // scopes the reconstructed `splits` input to effectiveParticipantIds
