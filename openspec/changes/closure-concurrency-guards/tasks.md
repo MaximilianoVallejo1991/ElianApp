@@ -77,6 +77,10 @@ Deliberately NOT fixed (owner-confirmed, accepted): the guard collapsing "row de
 - [ ] 5.3 Run `npx prisma migrate dev --name add_period_current_unique_constraint`; verify generated SQL is a plain `CREATE UNIQUE INDEX` (no `CONCURRENTLY`), commit as-is
 - [ ] 5.4 Note (not scripted): pre-flight duplicate-`isCurrent` check from design.md before applying in any real environment
 
+### Deferred finding (PR 3 verify, pending investigation before archive)
+
+`closure.service.js` (untouched by this cycle) only blocks STATIC closure on PENDING payments — its own code comment says "REJECTED payments are historical, not blocking." But the `payment-acceptance` spec (inherited from Cycle 1) has a "Rejection Blocks STATIC Closure" requirement, with zero test coverage anywhere confirming either behavior. Not a concurrency bug, not caused by this cycle, not blocking any of the 4 PRs — owner decision: leave pending, investigate before archiving this change (unclear yet whether the code or the inherited spec is the stale one).
+
 ## Phase 6: Final Verification (after all 4 PRs merged)
 
 - [ ] 6.1 Run `pnpm --filter backend test && pnpm --filter frontend test -- --run` — full suite green
