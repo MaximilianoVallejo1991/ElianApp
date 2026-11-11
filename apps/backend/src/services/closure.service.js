@@ -179,9 +179,21 @@ export async function startClosure(groupId, userId) {
     );
   }
 
-  return prisma.period.update({
-    where: { id: period.id },
-    data: { status: 'CLOSING' },
+  return prisma.$transaction(async (tx) => {
+    // Atomic guard: re-assert OPEN inside the write. A concurrent caller that
+    // passed the same read-check above loses here with count 0.
+    const guard = await tx.period.updateMany({
+      where: { id: period.id, status: 'OPEN' },
+      data: { status: 'CLOSING' },
+    });
+
+    if (guard.count !== 1) {
+      throw new AppError('CLOSURE_BLOCKED', 409, 'Period is no longer in OPEN status');
+    }
+
+    // Our write holds the row lock until commit, so this read returns our own
+    // transition — `updateMany` cannot return the row itself.
+    return tx.period.findUnique({ where: { id: period.id } });
   });
 }
 
@@ -231,15 +243,31 @@ export async function completeClosure(groupId, userId) {
     );
   }
 
-  // Check all balances are zero
+  // Check all balances are zero. Not re-verified inside the transaction
+  // below — same accepted staleness tradeoff as partialClosure (ADR-6):
+  // the guard prevents a corrupting double-transition, not every possible
+  // stale read in this function.
   await requireZeroBalances(period.id, groupId);
 
-  return prisma.period.update({
-    where: { id: period.id },
-    data: {
-      status: 'CLOSED',
-      closedAt: new Date(),
-    },
+  return prisma.$transaction(async (tx) => {
+    // Atomic guard: re-assert CLOSING inside the write. A concurrent caller
+    // that passed the same read-check above loses here with count 0.
+    const guard = await tx.period.updateMany({
+      where: { id: period.id, status: 'CLOSING' },
+      data: {
+        status: 'CLOSED',
+        isCurrent: false,
+        closedAt: new Date(),
+      },
+    });
+
+    if (guard.count !== 1) {
+      throw new AppError('CLOSURE_BLOCKED', 409, 'Period is no longer in CLOSING status');
+    }
+
+    // Our write holds the row lock until commit, so this read returns our own
+    // transition — `updateMany` cannot return the row itself.
+    return tx.period.findUnique({ where: { id: period.id } });
   });
 }
 
@@ -383,14 +411,24 @@ export async function finalClosure(groupId, userId) {
     );
   }
 
-  // Check all balances are zero
+  // Check all balances are zero. Same accepted staleness tradeoff as
+  // partialClosure/completeClosure (ADR-6) — not re-verified inside the
+  // transaction below.
   await requireZeroBalances(period.id, groupId);
 
   // Atomic: close period + mark group as closed
   return prisma.$transaction(async (tx) => {
-    // Close period
-    const closedPeriod = await tx.period.update({
-      where: { id: period.id },
+    // Guard runs before group.update below: Period before Group. A losing
+    // call's count is 0, so the whole tx rolls back before the group's
+    // status is ever touched.
+    //
+    // This order is the inverse of deleteGroup's cascade (Group -> Period),
+    // a known, accepted lock-order inversion — see design.md's "Lock Order
+    // Audit" before changing it. Worst case is a 40P01 deadlock abort on
+    // one side, zero data corruption; the real fix belongs to deleteGroup
+    // and is out of scope here.
+    const guard = await tx.period.updateMany({
+      where: { id: period.id, status: 'CLOSING' },
       data: {
         status: 'FINAL',
         isCurrent: false,
@@ -398,13 +436,19 @@ export async function finalClosure(groupId, userId) {
       },
     });
 
-    // Mark group as permanently closed
+    if (guard.count !== 1) {
+      throw new AppError('CLOSURE_BLOCKED', 409, 'Period is no longer in CLOSING status');
+    }
+
+    // Mark group as permanently closed. Runs only if the guard above won.
     await tx.group.update({
       where: { id: groupId },
       data: { status: 'CLOSED' },
     });
 
-    return closedPeriod;
+    // Our write holds the row lock until commit, so this read returns our own
+    // transition — `updateMany` cannot return the row itself.
+    return tx.period.findUnique({ where: { id: period.id } });
   });
 }
 

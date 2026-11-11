@@ -44,13 +44,19 @@ Design's narrative says PR1 "carries the collateral fixups for the closure tests
 
 ## Phase 3: Remaining Closure Transitions — PR 2 `[backend]`
 
-- [ ] 3.1 [RED] `closure-concurrency.test.js`: double-fire `startClosure` → 1 fulfilled, 1 `CLOSURE_BLOCKED` 409
-- [ ] 3.2 [GREEN] `closure.service.js` `startClosure` (L182-185): wrap in `$transaction`, guarded `updateMany` (`OPEN→CLOSING`) + `findUnique` return
-- [ ] 3.3 [RED] `closure-concurrency.test.js`: double-fire `completeClosure` → 1 fulfilled, 1 409
-- [ ] 3.4 [GREEN] `closure.service.js` `completeClosure` (L237-243): same pattern (`requireZeroBalances`/pending-count checks stay above the `$transaction`, ADR-6)
-- [ ] 3.5 [RED] `closure-concurrency.test.js`: double-fire `finalClosure` → 1 fulfilled + `Group.status=CLOSED`, 1 409; guard's `invocationCallOrder` < `group.update`'s
-- [ ] 3.6 [GREEN] `closure.service.js` `finalClosure` (L371-389): guard #1 → `group.update` → `findUnique`; add a code comment above the guard documenting the accepted Period→Group vs. `deleteGroup`'s Group→Period lock-order inversion (not fixed here)
-- [ ] 3.7 [Collateral][GREEN] `soft-delete-filters.test.js` L53/74/121: remaining `period.update` stubs → `period.updateMany` + `period.findUnique`
+- [x] 3.1 [RED] `closure-concurrency.test.js`: double-fire `startClosure` → 1 fulfilled, 1 `CLOSURE_BLOCKED` 409
+- [x] 3.2 [GREEN] `closure.service.js` `startClosure` (L182-185): wrap in `$transaction`, guarded `updateMany` (`OPEN→CLOSING`) + `findUnique` return
+- [x] 3.3 [RED] `closure-concurrency.test.js`: double-fire `completeClosure` → 1 fulfilled, 1 409
+- [x] 3.4 [GREEN] `closure.service.js` `completeClosure` (L237-243): same pattern (`requireZeroBalances`/pending-count checks stay above the `$transaction`, ADR-6)
+- [x] 3.5 [RED] `closure-concurrency.test.js`: double-fire `finalClosure` → 1 fulfilled + `Group.status=CLOSED`, 1 409; guard's `invocationCallOrder` < `group.update`'s
+- [x] 3.6 [GREEN] `closure.service.js` `finalClosure` (L371-389): guard #1 → `group.update` → `findUnique`; add a code comment above the guard documenting the accepted Period→Group vs. `deleteGroup`'s Group→Period lock-order inversion (not fixed here)
+- [x] 3.7 [Collateral][GREEN] `soft-delete-filters.test.js` L53/74/121: remaining `period.update` stubs → `period.updateMany` + `period.findUnique`
+
+**Addendum (PR 2, post-apply code review)** — 2 fixes:
+1. `completeClosure` never set `isCurrent: false` on the closed period (pre-existing bug, this PR rewrote the exact statement without fixing it) — would permanently strand a group's current-period pointer on a CLOSED row with no way to open a new one. Fixed with a RED→GREEN test asserting `isCurrent: false` in the guard's `data`, then the one-line fix.
+2. Comment accuracy: added the missing ADR-6 staleness-disclosure comment to `completeClosure`/`finalClosure` (only `partialClosure` had it); fixed `finalClosure`'s lock-order comment, which falsely claimed to match `partialClosure`'s lock order and used CAPS for emphasis (violates this project's no-persona-emphasis-in-code rule) — shortened to a pointer at design.md's Lock Order Audit.
+
+Deliberately NOT fixed (owner-confirmed, accepted): the guard collapsing "row deleted" vs "status changed" into one generic 409 with no distinct server log (rare edge case, consistent with the already-accepted lock-order-inversion risk); extracting the now-4x-duplicated guard pattern into a shared helper (deferred to a cleanup pass after PR 3 adds 2 more instances, to avoid re-touching PR 1's merged `partialClosure` here).
 
 ## Phase 4: Payment Guards — PR 3 `[backend]`
 
