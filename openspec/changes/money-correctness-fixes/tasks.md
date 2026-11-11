@@ -126,6 +126,6 @@ This is the last addendum tracked for this PR — further edge cases in this fal
 
 ## Phase 5: Final Verification (after all 4 PRs merged)
 
-- [ ] 5.1 Run `pnpm --filter backend test && pnpm --filter frontend test` — full suite green
-- [ ] 5.2 Run `pnpm -r run build` — passes
-- [ ] 5.3 Grep sweep: every `prisma.payment.`/`prisma.expense.`/`_count` site in the Bug-1 flow table carries `deletedAt: null`
+- [x] 5.1 Run `pnpm --filter backend test && pnpm --filter frontend test` — full suite green (54/54 backend, 45/45 frontend, on `main` at `d2fed35`)
+- [x] 5.2 Run `pnpm -r run build` — passes (frontend builds clean, pre-existing CSS/chunk-size warnings only; backend has no build step)
+- [x] 5.3 Grep sweep: every `prisma.payment.`/`prisma.expense.`/`_count` site in the Bug-1 flow table carries `deletedAt: null` (verified `balance.service.js`, `closure.service.js`, `period.service.js`, `group.service.js`, `membership.service.js` — two apparent misses in `balance.service.js` were false positives: the filter lives in the `expenseWhere`/`paymentWhere` variable construction a few lines above the query, confirmed present)
