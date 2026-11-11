@@ -551,93 +551,136 @@ export async function updateExpense(expenseId, data, userId) {
     );
   }
 
-  // Determine the effective amount and splitType (use new or keep old)
-  const effectiveAmount = data.amount ?? Number(existing.amount);
-  const effectiveSplitType = data.splitType ?? existing.splitType;
+  // Does this partial update need splits recalculated at all? Gate on EVERY
+  // field that can change what a recompute would produce — not just
+  // amount/splitType/splits. `participantIds` alone (no amount/splitType/
+  // splits in the body) MUST also trigger recompute: EQUAL membership is
+  // driven entirely by participantIds, so a participantIds-only PUT would
+  // otherwise be silently dropped (second addendum, Bug 2).
+  const needsRecompute =
+    data.amount !== undefined ||
+    data.splitType !== undefined ||
+    data.splits !== undefined ||
+    data.participantIds !== undefined;
 
   let updatedExpense;
 
-  // If amount or splitType changed, recalculate splits
-  if (data.amount !== undefined || data.splitType !== undefined || data.splits !== undefined) {
-    let splitsInput = data.splits;
-    let effectiveParticipantIds = data.participantIds;
+  if (needsRecompute) {
+    // Determine the effective amount and splitType (use new or keep old)
+    const effectiveAmount = data.amount ?? Number(existing.amount);
+    const effectiveSplitType = data.splitType ?? existing.splitType;
 
-    if (splitsInput === undefined) {
-      if (effectiveSplitType === 'EQUAL' || effectiveSplitType === 'PERCENTAGE') {
-        // No splits provided in this partial update — fall back to the
-        // expense's EXISTING persisted splits instead of treating "omitted"
-        // as "empty". Filtered to active members only, reusing the SAME
-        // active-membership check/query `computeSplits`' PERCENTAGE branch
-        // already performs for an explicit `participantIds` list — so a
-        // member who has since left the group never gets their stale split
-        // silently resurrected (e.g. PERCENTAGE 60/40 -> B leaves -> a
-        // `PUT { amount }` must not bring back B's 40%).
-        const existingSplits = await prisma.expenseSplit.findMany({
-          where: { expenseId },
-        });
-        const activeMemberSet = new Set(await getActiveMemberIds(existing.groupId));
+    // `participantIds` drives EQUAL membership directly and scopes which
+    // persisted splits are relevant when reconstructing PERCENTAGE
+    // percentages. `splits` only matters for PERCENTAGE. Gate reconstruction
+    // on each field independently — `data.splits === []` is a DEFINED
+    // (non-undefined) empty array, not "omitted", and must NOT be treated as
+    // "no splits provided" for the purpose of deciding whether to
+    // reconstruct `effectiveParticipantIds` (second addendum, Bug 1: EQUAL
+    // ignores `splits` content entirely, so gating reconstruction on
+    // `splits` instead of `participantIds` let `PUT { splits: [] }` fall
+    // through to computeSplits with participantIds=undefined, which
+    // silently expands EQUAL to every active member).
+    let effectiveParticipantIds = data.participantIds;
+    let effectiveSplitsInput = data.splits;
+
+    if (effectiveSplitType === 'COLLECTIVE') {
+      // computeSplits has no COLLECTIVE branch — it always throws
+      // INVALID_SPLITS regardless of `splits` content. COLLECTIVE expenses
+      // are not recalculated through this fallback at all; they are edited
+      // via item-reporting.service.js's reportItem/recomputeAndPersist
+      // (items -> calculateCollectiveSplits) instead. Reconstructing
+      // persisted splits here would be a wasted query, so skip it —
+      // `computeSplits` will reject below exactly as before.
+      effectiveSplitsInput = effectiveSplitsInput ?? [];
+    } else {
+      // EQUAL / PERCENTAGE
+      const needsSplitsReconstruction = effectiveSplitsInput === undefined;
+
+      // EQUAL always needs effectiveParticipantIds — it is EQUAL's only
+      // source of membership. PERCENTAGE only needs it to SCOPE a
+      // reconstructed `effectiveSplitsInput` (see below) — when the caller
+      // supplies an explicit, fully-formed `splits` array, that array
+      // already IS the new membership declaration; reconstructing a STALE
+      // participant set from old persisted rows and using it to filter
+      // those fresh, explicit splits would silently drop legitimate new
+      // entries that happen not to overlap the old set. So for PERCENTAGE,
+      // only reconstruct participantIds when splits are ALSO being
+      // reconstructed (i.e. both omitted together).
+      const needsParticipantReconstruction =
+        effectiveParticipantIds === undefined &&
+        (effectiveSplitType === 'EQUAL' || needsSplitsReconstruction);
+
+      if (needsParticipantReconstruction || needsSplitsReconstruction) {
+        // Fall back to the expense's EXISTING persisted splits instead of
+        // treating "omitted" as "empty". Filtered to active members only,
+        // so a member who has since left the group never gets silently
+        // resurrected (e.g. PERCENTAGE 60/40 -> B leaves -> a `PUT
+        // { amount }` must not bring back B's 40%). The two queries don't
+        // depend on each other — run them concurrently.
+        const [existingSplits, activeMemberIds] = await Promise.all([
+          prisma.expenseSplit.findMany({ where: { expenseId } }),
+          getActiveMemberIds(existing.groupId),
+        ]);
+        const activeMemberSet = new Set(activeMemberIds);
         const activeExistingSplits = existingSplits.filter((s) => activeMemberSet.has(s.userId));
 
-        if (effectiveSplitType === 'PERCENTAGE') {
+        if (needsParticipantReconstruction) {
+          // Preserve the ORIGINAL participant subset this expense was
+          // created with (e.g. 2 of 5 group members), instead of letting
+          // computeSplits' EQUAL branch recalculate across every CURRENT
+          // active member when no participantIds is forwarded.
+          const reconstructedParticipantIds = activeExistingSplits.map((s) => s.userId);
+
+          // computeSplits' EQUAL branch does not itself validate that a
+          // non-empty participantIds list still has active members (that is
+          // a separate, pre-existing gap — see tasks.md), and treats an
+          // EMPTY list as "fall back to every active member", which would
+          // silently defeat the subset we are trying to preserve here. So
+          // if every original participant has left the group, reject
+          // clearly instead of letting that fallback silently expand the
+          // split to the whole group. (PERCENTAGE's own validateSplits sum
+          // check already rejects the equivalent empty-set case naturally.)
+          if (effectiveSplitType === 'EQUAL' && reconstructedParticipantIds.length === 0) {
+            throw new AppError(
+              'INVALID_PARTICIPANTS',
+              400,
+              "None of this expense's original participants are still active group members",
+            );
+          }
+
+          effectiveParticipantIds = reconstructedParticipantIds;
+        }
+
+        if (needsSplitsReconstruction) {
           // Only `percentage` is reused from the persisted split — `amount`
           // is always recomputed fresh by computeSplits for the new total.
-          // If filtering removed someone, the remaining percentages will no
-          // longer sum to 100 — let the EXISTING guards (calculatePercentage
-          // Splits' own internal guard, and computeSplits' defense-in-depth
-          // sum check) correctly reject with INVALID_SPLITS/VALIDATION_ERROR
-          // rather than silently proceeding or auto-redistributing.
-          splitsInput = activeExistingSplits.map((s) => ({
-            userId: s.userId,
-            percentage: s.percentage !== null ? Number(s.percentage) : undefined,
-          }));
-        } else {
-          // EQUAL: computeSplits' EQUAL branch never reads `splits` content,
-          // only `participantIds` — an empty array just satisfies
-          // validateSplits' shape check.
-          splitsInput = [];
-
-          if (effectiveParticipantIds === undefined) {
-            // Preserve the ORIGINAL participant subset this expense was
-            // created with (e.g. 2 of 5 group members), instead of letting
-            // computeSplits' EQUAL branch recalculate across every CURRENT
-            // active member when no participantIds is forwarded.
-            const reconstructedParticipantIds = activeExistingSplits.map((s) => s.userId);
-
-            // computeSplits' EQUAL branch does not itself validate that a
-            // non-empty participantIds list still has active members (that
-            // is a separate, pre-existing gap — see tasks.md), and treats an
-            // EMPTY list as "fall back to every active member", which would
-            // silently defeat the subset we are trying to preserve here. So
-            // if every original participant has left the group, reject
-            // clearly instead of letting that fallback silently expand the
-            // split to the whole group.
-            if (reconstructedParticipantIds.length === 0) {
-              throw new AppError(
-                'INVALID_PARTICIPANTS',
-                400,
-                "None of this expense's original participants are still active group members",
-              );
-            }
-
-            effectiveParticipantIds = reconstructedParticipantIds;
-          }
+          // Scoped to effectiveParticipantIds (now always defined — either
+          // the caller's explicit list, or just reconstructed above) so an
+          // explicit narrower participantIds also narrows which
+          // reconstructed percentages are used, not just the full persisted
+          // set. If filtering removed someone, the remaining percentages
+          // will no longer sum to 100 — let the EXISTING guards
+          // (calculatePercentageSplits' own internal guard, and
+          // computeSplits' defense-in-depth sum check) correctly reject
+          // with INVALID_SPLITS/VALIDATION_ERROR rather than silently
+          // proceeding or auto-redistributing. (Ignored entirely by
+          // computeSplits for EQUAL — content doesn't matter there.)
+          const participantFilter = new Set(effectiveParticipantIds);
+          effectiveSplitsInput = activeExistingSplits
+            .filter((s) => participantFilter.has(s.userId))
+            .map((s) => ({
+              userId: s.userId,
+              percentage: s.percentage !== null ? Number(s.percentage) : undefined,
+            }));
         }
-      } else {
-        // COLLECTIVE: computeSplits has no COLLECTIVE branch — it always
-        // throws INVALID_SPLITS regardless of `splits` content. COLLECTIVE
-        // expenses are not recalculated through this fallback at all; they
-        // are edited via item-reporting.service.js's reportItem/
-        // recomputeAndPersist (items -> calculateCollectiveSplits) instead.
-        // Reconstructing persisted splits here would be a wasted query, so
-        // skip it — `computeSplits` will reject below exactly as before.
-        splitsInput = splitsInput ?? [];
       }
     }
 
     const calculatedSplits = await computeSplits(
       effectiveAmount,
       effectiveSplitType,
-      splitsInput,
+      effectiveSplitsInput,
       existing.groupId,
       effectiveParticipantIds,
     );
