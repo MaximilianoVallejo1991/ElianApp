@@ -50,7 +50,8 @@ describe('closure.service.js — soft-deleted payments excluded', () => {
     prisma.period.findFirst.mockResolvedValue({ id: periodId, status: 'OPEN' });
     prisma.payment.count.mockResolvedValue(0);
     prisma.expense.count.mockResolvedValue(1);
-    prisma.period.update.mockResolvedValue({ id: periodId, status: 'CLOSING' });
+    prisma.period.updateMany.mockResolvedValue({ count: 1 });
+    prisma.period.findUnique.mockResolvedValue({ id: periodId, status: 'CLOSING' });
 
     await startClosure(groupId, ownerId);
 
@@ -71,7 +72,8 @@ describe('closure.service.js — soft-deleted payments excluded', () => {
     prisma.groupMember.findMany.mockResolvedValue([]);
     prisma.expense.findMany.mockResolvedValue([]);
     prisma.payment.findMany.mockResolvedValue([]);
-    prisma.period.update.mockResolvedValue({ id: periodId, status: 'CLOSED' });
+    prisma.period.updateMany.mockResolvedValue({ count: 1 });
+    prisma.period.findUnique.mockResolvedValue({ id: periodId, status: 'CLOSED' });
 
     await completeClosure(groupId, ownerId);
 
@@ -118,8 +120,9 @@ describe('closure.service.js — soft-deleted payments excluded', () => {
     prisma.groupMember.findMany.mockResolvedValue([]);
     prisma.expense.findMany.mockResolvedValue([]);
     prisma.payment.findMany.mockResolvedValue([]);
-    prisma.period.update.mockResolvedValue({ id: periodId, status: 'FINAL' });
+    prisma.period.updateMany.mockResolvedValue({ count: 1 });
     prisma.group.update.mockResolvedValue({ id: groupId, status: 'CLOSED' });
+    prisma.period.findUnique.mockResolvedValue({ id: periodId, status: 'FINAL' });
 
     await finalClosure(groupId, ownerId);
 

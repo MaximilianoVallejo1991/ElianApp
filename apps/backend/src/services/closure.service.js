@@ -179,9 +179,21 @@ export async function startClosure(groupId, userId) {
     );
   }
 
-  return prisma.period.update({
-    where: { id: period.id },
-    data: { status: 'CLOSING' },
+  return prisma.$transaction(async (tx) => {
+    // Atomic guard: re-assert OPEN inside the write. A concurrent caller that
+    // passed the same read-check above loses here with count 0.
+    const guard = await tx.period.updateMany({
+      where: { id: period.id, status: 'OPEN' },
+      data: { status: 'CLOSING' },
+    });
+
+    if (guard.count !== 1) {
+      throw new AppError('CLOSURE_BLOCKED', 409, 'Period is no longer in OPEN status');
+    }
+
+    // Our write holds the row lock until commit, so this read returns our own
+    // transition — `updateMany` cannot return the row itself.
+    return tx.period.findUnique({ where: { id: period.id } });
   });
 }
 
@@ -234,12 +246,24 @@ export async function completeClosure(groupId, userId) {
   // Check all balances are zero
   await requireZeroBalances(period.id, groupId);
 
-  return prisma.period.update({
-    where: { id: period.id },
-    data: {
-      status: 'CLOSED',
-      closedAt: new Date(),
-    },
+  return prisma.$transaction(async (tx) => {
+    // Atomic guard: re-assert CLOSING inside the write. A concurrent caller
+    // that passed the same read-check above loses here with count 0.
+    const guard = await tx.period.updateMany({
+      where: { id: period.id, status: 'CLOSING' },
+      data: {
+        status: 'CLOSED',
+        closedAt: new Date(),
+      },
+    });
+
+    if (guard.count !== 1) {
+      throw new AppError('CLOSURE_BLOCKED', 409, 'Period is no longer in CLOSING status');
+    }
+
+    // Our write holds the row lock until commit, so this read returns our own
+    // transition — `updateMany` cannot return the row itself.
+    return tx.period.findUnique({ where: { id: period.id } });
   });
 }
 
@@ -388,9 +412,24 @@ export async function finalClosure(groupId, userId) {
 
   // Atomic: close period + mark group as closed
   return prisma.$transaction(async (tx) => {
-    // Close period
-    const closedPeriod = await tx.period.update({
-      where: { id: period.id },
+    // STATEMENT #1, non-negotiable: Period before Group, matching
+    // partialClosure's lock order. A losing call's count is 0 and the whole
+    // tx rolls back before group.update runs, so the group's status is never
+    // touched by the loser.
+    //
+    // KNOWN, ACCEPTED lock-order inversion: `deleteGroup` (group.service.js)
+    // cascades Group → Period (`onDelete: Cascade` on Period.groupId), the
+    // exact inverse of this Period → Group order. Two concurrent
+    // transactions — one here, one in deleteGroup — can form a genuine
+    // deadlock cycle. This is a confirmed, accepted tradeoff (see
+    // design.md's "Lock Order Audit"), not an oversight: worst case is
+    // Postgres aborting one side with a `40P01` deadlock error (one request
+    // 500s), zero data corruption. The fix belongs to `deleteGroup` (lock
+    // Period before Group there), which is group-deletion/permissions
+    // territory and out of scope for this change. Do NOT "fix" this
+    // ordering back to Group-first without re-reading that audit first.
+    const guard = await tx.period.updateMany({
+      where: { id: period.id, status: 'CLOSING' },
       data: {
         status: 'FINAL',
         isCurrent: false,
@@ -398,13 +437,19 @@ export async function finalClosure(groupId, userId) {
       },
     });
 
-    // Mark group as permanently closed
+    if (guard.count !== 1) {
+      throw new AppError('CLOSURE_BLOCKED', 409, 'Period is no longer in CLOSING status');
+    }
+
+    // Mark group as permanently closed. Runs only if the guard above won.
     await tx.group.update({
       where: { id: groupId },
       data: { status: 'CLOSED' },
     });
 
-    return closedPeriod;
+    // Our write holds the row lock until commit, so this read returns our own
+    // transition — `updateMany` cannot return the row itself.
+    return tx.period.findUnique({ where: { id: period.id } });
   });
 }
 
