@@ -72,10 +72,14 @@ Deliberately NOT fixed (owner-confirmed, accepted): the guard collapsing "row de
 
 ## Phase 5: DB Defense-in-Depth — PR 4 `[backend]`
 
-- [ ] 5.1 `schema.prisma`: add `previewFeatures = ["partialIndexes"]` to `generator client`
-- [ ] 5.2 `schema.prisma`: add `@@unique([groupId], where: { isCurrent: true })` on `Period`
-- [ ] 5.3 Run `npx prisma migrate dev --name add_period_current_unique_constraint`; verify generated SQL is a plain `CREATE UNIQUE INDEX` (no `CONCURRENTLY`), commit as-is
-- [ ] 5.4 Note (not scripted): pre-flight duplicate-`isCurrent` check from design.md before applying in any real environment
+- [x] 5.1 `schema.prisma`: add `previewFeatures = ["partialIndexes"]` to `generator client`
+- [x] 5.2 `schema.prisma`: add `@@unique([groupId], where: { isCurrent: true })` on `Period`
+- [x] 5.3 Run `npx prisma migrate dev --name add_period_current_unique_constraint`; verify generated SQL is a plain `CREATE UNIQUE INDEX` (no `CONCURRENTLY`), commit as-is
+- [x] 5.4 Note (not scripted): pre-flight duplicate-`isCurrent` check from design.md before applying in any real environment
+
+**Addendum (PR 4, execution note)** — this sandbox's `npx prisma migrate dev` refuses to run ("environment is non-interactive, which is not supported" — Prisma 7.8's interactive wizard requires a real TTY, which this shell does not provide; `winpty` could not bridge it either, since `npx` here is a shell script, not a Win32 binary). Worked around with the officially documented non-interactive-safe path, producing byte-identical Prisma output, not hand-authored SQL: `npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` to get Prisma's own computed diff, wrote that exact output into a manually-timestamped migration folder (`20261111232910_add_period_current_unique_constraint/migration.sql`, same naming convention `prisma migrate dev` would have used), then `npx prisma migrate deploy` to apply it (the documented non-interactive deploy command) and record it in `_prisma_migrations`. Generated SQL confirmed plain, no `CONCURRENTLY`, no unrelated statements: `CREATE UNIQUE INDEX "Period_groupId_key" ON "Period"("groupId") WHERE ("isCurrent" = true);`. Verified post-apply via `pg_indexes` query against the live `splitwise-db` container. One snag: the first failed non-interactive `migrate dev` attempt left an orphaned session holding the `_prisma_migrations` advisory lock, which blocked the subsequent `migrate deploy` with `P1002` until `pg_terminate_backend`'d — not a schema issue, a side effect of the aborted interactive attempt.
+
+Pre-flight duplicate-`isCurrent` check (design.md step 3) run against the local `splitwise-db` Postgres container (`localhost:5433/splitwise`, confirmed local via `docker-compose.yaml` before running anything DB-touching): `SELECT "groupId", COUNT(*) FROM "Period" WHERE "isCurrent" = true GROUP BY "groupId" HAVING COUNT(*) > 1;` → 0 rows. Clean, migration applied without a `23505` conflict.
 
 ### Deferred finding (PR 3 verify, pending investigation before archive)
 
