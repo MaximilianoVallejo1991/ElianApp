@@ -37,6 +37,7 @@ import {
 } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import { computeSettlements } from '../utils/settlements';
+import { isPaymentAcceptanceActive } from '../utils/payments';
 import ExpenseForm from '../components/ExpenseForm';
 import PaymentForm from '../components/PaymentForm';
 import InviteModal from '../components/InviteModal';
@@ -447,9 +448,11 @@ export default function GroupDetailPage() {
 
   // Check if all payments in CLOSING period are settled and balances are zero (for STATIC groups)
   const isClosing = currentPeriod?.status === 'CLOSING';
-  const pendingPayments = isClosing ? payments.filter((p) => p.status === 'PENDING') : [];
-  const rejectedPayments = isClosing ? payments.filter((p) => p.status === 'REJECTED') : [];
-  const acceptedPayments = isClosing ? payments.filter((p) => p.status === 'ACCEPTED') : [];
+  // Payment acceptance (status badge + accept/reject) is always live for DYNAMIC
+  // groups, and live for STATIC groups only during the CLOSING period.
+  const paymentAcceptanceActive = isPaymentAcceptanceActive(group.balanceMode, currentPeriod?.status);
+  const pendingPayments = payments.filter((p) => p.status === 'PENDING');
+  const acceptedPayments = payments.filter((p) => p.status === 'ACCEPTED');
   const allBalancesZero = balances.every((b) => Math.abs(b.netBalance) < 0.01);
   const readyForClosure = isClosing
     && pendingPayments.length === 0
@@ -591,7 +594,7 @@ export default function GroupDetailPage() {
                       <p className="text-xs text-text-muted">
                         {formatDate(payment.paidAt)}
                         {payment.method ? ` · ${payment.method}` : ''}
-                        {isClosing && (
+                        {paymentAcceptanceActive && (
                           <span className="ml-2">
                             {isPending && <span className="text-warning">· {t('payment.pending')}</span>}
                             {isAccepted && <span className="text-success">· {t('payment.accepted')}</span>}
@@ -605,7 +608,7 @@ export default function GroupDetailPage() {
                     <span className="font-heading text-sm font-bold text-cta">
                       {formatCurrency(payment.amount, currency)}
                     </span>
-                    {isClosing && isReceiver && isPending && (
+                    {paymentAcceptanceActive && isReceiver && isPending && (
                       <>
                         <button
                           type="button"
