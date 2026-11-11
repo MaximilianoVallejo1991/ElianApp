@@ -532,7 +532,7 @@ export default function GroupDetailPage() {
     <section className={sectionClasses}>
       <div className="flex items-center justify-between">
         <h2 className="font-heading text-xl font-bold text-primary">{t('group.payments')}</h2>
-        {(group.balanceMode !== 'STATIC' || currentPeriod?.status === 'CLOSING') && (
+        {paymentAcceptanceActive && (
           <button
             type="button"
             onClick={() => setShowPaymentForm(true)}
@@ -553,7 +553,7 @@ export default function GroupDetailPage() {
                 : currentPeriod?.status === 'CLOSED' ? t('group.noPaymentsClosed')
                   : t('group.noPaymentsFinal')
             )}
-            {(group.balanceMode !== 'STATIC' || currentPeriod?.status === 'CLOSING') && (
+            {paymentAcceptanceActive && (
               t('group.noPaymentsClosing')
             )}
           </p>
@@ -720,7 +720,7 @@ export default function GroupDetailPage() {
                 </button>
               )}
               {/* Show Record payment for DYNAMIC groups, or STATIC groups during CLOSING */}
-              {(group.balanceMode !== 'STATIC' || currentPeriod?.status === 'CLOSING') && (
+              {paymentAcceptanceActive && (
                 <button
                   type="button"
                   onClick={() => setShowPaymentForm(true)}
