@@ -52,7 +52,7 @@ Design's narrative says PR1 "carries the collateral fixups for the closure tests
 - [x] 3.6 [GREEN] `closure.service.js` `finalClosure` (L371-389): guard #1 → `group.update` → `findUnique`; add a code comment above the guard documenting the accepted Period→Group vs. `deleteGroup`'s Group→Period lock-order inversion (not fixed here)
 - [x] 3.7 [Collateral][GREEN] `soft-delete-filters.test.js` L53/74/121: remaining `period.update` stubs → `period.updateMany` + `period.findUnique`
 
-**Addendum (PR 2, post-merge code review)** — 2 fixes:
+**Addendum (PR 2, post-apply code review)** — 2 fixes:
 1. `completeClosure` never set `isCurrent: false` on the closed period (pre-existing bug, this PR rewrote the exact statement without fixing it) — would permanently strand a group's current-period pointer on a CLOSED row with no way to open a new one. Fixed with a RED→GREEN test asserting `isCurrent: false` in the guard's `data`, then the one-line fix.
 2. Comment accuracy: added the missing ADR-6 staleness-disclosure comment to `completeClosure`/`finalClosure` (only `partialClosure` had it); fixed `finalClosure`'s lock-order comment, which falsely claimed to match `partialClosure`'s lock order and used CAPS for emphasis (violates this project's no-persona-emphasis-in-code rule) — shortened to a pointer at design.md's Lock Order Audit.
 
