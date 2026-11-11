@@ -243,7 +243,10 @@ export async function completeClosure(groupId, userId) {
     );
   }
 
-  // Check all balances are zero
+  // Check all balances are zero. Not re-verified inside the transaction
+  // below — same accepted staleness tradeoff as partialClosure (ADR-6):
+  // the guard prevents a corrupting double-transition, not every possible
+  // stale read in this function.
   await requireZeroBalances(period.id, groupId);
 
   return prisma.$transaction(async (tx) => {
@@ -407,27 +410,22 @@ export async function finalClosure(groupId, userId) {
     );
   }
 
-  // Check all balances are zero
+  // Check all balances are zero. Same accepted staleness tradeoff as
+  // partialClosure/completeClosure (ADR-6) — not re-verified inside the
+  // transaction below.
   await requireZeroBalances(period.id, groupId);
 
   // Atomic: close period + mark group as closed
   return prisma.$transaction(async (tx) => {
-    // STATEMENT #1, non-negotiable: Period before Group, matching
-    // partialClosure's lock order. A losing call's count is 0 and the whole
-    // tx rolls back before group.update runs, so the group's status is never
-    // touched by the loser.
+    // Guard runs before group.update below: Period before Group. A losing
+    // call's count is 0, so the whole tx rolls back before the group's
+    // status is ever touched.
     //
-    // KNOWN, ACCEPTED lock-order inversion: `deleteGroup` (group.service.js)
-    // cascades Group → Period (`onDelete: Cascade` on Period.groupId), the
-    // exact inverse of this Period → Group order. Two concurrent
-    // transactions — one here, one in deleteGroup — can form a genuine
-    // deadlock cycle. This is a confirmed, accepted tradeoff (see
-    // design.md's "Lock Order Audit"), not an oversight: worst case is
-    // Postgres aborting one side with a `40P01` deadlock error (one request
-    // 500s), zero data corruption. The fix belongs to `deleteGroup` (lock
-    // Period before Group there), which is group-deletion/permissions
-    // territory and out of scope for this change. Do NOT "fix" this
-    // ordering back to Group-first without re-reading that audit first.
+    // This order is the inverse of deleteGroup's cascade (Group -> Period),
+    // a known, accepted lock-order inversion — see design.md's "Lock Order
+    // Audit" before changing it. Worst case is a 40P01 deadlock abort on
+    // one side, zero data corruption; the real fix belongs to deleteGroup
+    // and is out of scope here.
     const guard = await tx.period.updateMany({
       where: { id: period.id, status: 'CLOSING' },
       data: {
