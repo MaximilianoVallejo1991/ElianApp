@@ -89,6 +89,6 @@ Pre-flight duplicate-`isCurrent` check (design.md step 3) run against the local 
 
 ## Phase 6: Final Verification (after all 4 PRs merged)
 
-- [ ] 6.1 Run `pnpm --filter backend test && pnpm --filter frontend test -- --run` — full suite green
-- [ ] 6.2 Run `pnpm -r run build`
-- [ ] 6.3 Grep sweep: no `period.update(`/`payment.update(` with bare `where: { id }` remains on any state-transition path (`deletePayment`'s soft-delete `update` is legitimate, must stay)
+- [x] 6.1 Run `pnpm --filter backend test && pnpm --filter frontend test -- --run` — full suite green (73/73 backend, 45/45 frontend, on `main` at `637ec2e`)
+- [x] 6.2 Run `pnpm -r run build` — passes (frontend clean, pre-existing CSS/chunk-size warnings only; backend has no build step)
+- [x] 6.3 Grep sweep: no `period.update(`/`payment.update(` with bare `where: { id }` remains on any state-transition path — only match is `deletePayment`'s soft-delete `update` (L254), confirmed legitimate
