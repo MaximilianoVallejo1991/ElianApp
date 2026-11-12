@@ -48,14 +48,16 @@ The system MUST allow the payment receiver (`toUserId`) to reject a PENDING paym
 - WHEN user 1 submits `POST /payments/1/reject`
 - THEN system returns HTTP 403 with `{ error: "Only the payment receiver can reject", code: "FORBIDDEN" }`
 
-### Requirement: Rejection Blocks STATIC Closure
+### Requirement: REJECTED Payments Do Not Block STATIC Closure
 
-The system MUST prevent closure completion if any payment in a STATIC group's period has status REJECTED. The owner MUST resolve REJECTED payments before proceeding. This requirement does not apply to DYNAMIC groups, which have no closure workflow.
+A REJECTED payment MUST NOT by itself block closure completion for a STATIC group's period. Only PENDING payments block closure (see `period-management`'s closure-transition requirements). Rejection marks that specific payment attempt as void; it does not affect the underlying balance (only ACCEPTED payments count toward balance), so any still-outstanding debt is caught by the existing zero-balance check, not by counting REJECTED rows.
 
-(Previously: identical scope — closure blocking is unchanged, kept here for completeness)
+(Previously: this spec required blocking closure on any REJECTED payment, inherited from an earlier change's proposal and never actually implemented or tested. Investigated during `closure-concurrency-guards`: the live code in all four closure-transition functions has always deliberately treated REJECTED as historical/non-blocking. Corrected the spec to match the real, intentional behavior rather than carry forward an unimplemented requirement.)
 
-#### Scenario: Rejected payment prevents STATIC closure
+**Known gap, not fixed here**: a REJECTED payment's underlying debt can be masked if the group's aggregate balance nets to zero via *other* members' payments, even though the specific dispute between the original two parties was never actually resolved — the current zero-balance check can't see this, since it only looks at the net total, not at whether a given rejection's own debt was individually re-paid and accepted. A real fix needs a "resolution" concept (e.g. tying a new payment to the rejected one it supersedes, or an explicit "mark resolved" action) rather than a blanket reject-count check — a blanket check was tried and reverted, since it also blocks closure forever on ANY historical rejection, even one whose debt was already settled by a follow-up payment. Candidate for a future change once the resolution model is designed.
 
-- GIVEN STATIC group with CLOSING period and payment 1 with `status=REJECTED`
+#### Scenario: Rejected payment does not block closure once balances settle
+
+- GIVEN STATIC group with CLOSING period, payment 1 with `status=REJECTED`, and the same debt later settled by payment 2 with `status=ACCEPTED`
 - WHEN owner submits `POST /groups/:groupId/periods/current/complete-closure`
-- THEN system returns HTTP 409 with `{ error: "All payments must be ACCEPTED; found REJECTED payments", code: "CLOSURE_BLOCKED" }`
+- THEN the system does not block on payment 1's REJECTED status; closure proceeds if the zero-balance check also passes

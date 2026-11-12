@@ -83,9 +83,13 @@ Deliberately NOT fixed (owner-confirmed, accepted): the guard collapsing "row de
 
 Pre-flight duplicate-`isCurrent` check (design.md step 3) run against the local `splitwise-db` Postgres container (`localhost:5433/splitwise`, confirmed local via `docker-compose.yaml` before running anything DB-touching): `SELECT "groupId", COUNT(*) FROM "Period" WHERE "isCurrent" = true GROUP BY "groupId" HAVING COUNT(*) > 1;` → 0 rows. Clean, migration applied without a `23505` conflict.
 
-### Deferred finding (PR 3 verify, pending investigation before archive)
+### Deferred finding (PR 3 verify) — RESOLVED before archive
 
-`closure.service.js` (untouched by this cycle) only blocks STATIC closure on PENDING payments — its own code comment says "REJECTED payments are historical, not blocking." But the `payment-acceptance` spec (inherited from Cycle 1) has a "Rejection Blocks STATIC Closure" requirement, with zero test coverage anywhere confirming either behavior. Not a concurrency bug, not caused by this cycle, not blocking any of the 4 PRs — owner decision: leave pending, investigate before archiving this change (unclear yet whether the code or the inherited spec is the stale one).
+`closure.service.js` only blocked STATIC closure on PENDING payments, while the inherited `payment-acceptance` spec required blocking on any REJECTED payment too. Investigated: the code's behavior across all four closure-transition functions is deliberate and consistent, not an oversight.
+
+First attempted the opposite fix (make REJECTED block closure, matching the spec) in a throwaway branch — reverted. That check counted any historical REJECTED payment row, which blocks a period's closure **permanently**, even after the underlying debt is fully settled by a later ACCEPTED payment (confirmed by walking through the exact scenario: reject payment A, pay again with payment B, B gets accepted, balance nets to zero — the naive check still blocks on A forever, since nothing ever resolves/clears a REJECTED row). That's worse than the gap it was meant to close, so it was discarded rather than shipped.
+
+**Final decision: the spec was the stale artifact, not the code.** Updated `openspec/specs/payment-acceptance/spec.md`'s "Rejection Blocks STATIC Closure" requirement to "REJECTED Payments Do Not Block STATIC Closure," matching the real, intentional behavior, and documented the genuine gap this surfaced (a rejected payment's debt can be masked if the group's *aggregate* balance nets to zero via other members' payments, even though the specific two-party dispute was never resolved) as a candidate for a future change, once a real "resolution" concept (tying a replacement payment to the one it supersedes, or an explicit resolve action) is designed — a blanket reject-count check is not that design.
 
 ## Phase 6: Final Verification (after all 4 PRs merged)
 
