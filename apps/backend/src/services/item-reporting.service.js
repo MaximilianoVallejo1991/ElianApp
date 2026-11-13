@@ -13,6 +13,16 @@ import {
 //  report, update, delete items; recompute status; generate splits.
 // ---------------------------------------------------------------------------
 
+// ONE derived set feeds both the status view (getItemStatus) and the
+// persisted computation (recomputeAndPersist), so they can't disagree on
+// which items count. An item whose owner is no longer in participantIds is
+// already dropped by calculateCollectiveSplits — counting it here is what
+// let a COMPLETED expense persist splits that miss the total (ADR-10).
+function filterParticipantItems(expense) {
+  const participantSet = new Set(expense.participantIds);
+  return expense.items.filter((i) => participantSet.has(i.userId));
+}
+
 /**
  * Report (upsert) an item for a COLLECTIVE expense.
  *
@@ -196,13 +206,7 @@ export async function recomputeAndPersist(expenseId) {
     return null;
   }
 
-  // ONE derived set feeds BOTH the status computation and split generation.
-  // An item whose owner is no longer in participantIds is already dropped by
-  // calculateCollectiveSplits — counting it here is what let a COMPLETED
-  // expense persist splits that miss the total (ADR-10).
-  const participantSet = new Set(expense.participantIds);
-  const participantItems = expense.items.filter((i) => participantSet.has(i.userId));
-
+  const participantItems = filterParticipantItems(expense);
   const itemsSum = participantItems.reduce((sum, item) => sum + Number(item.amount), 0);
   const sharedCosts = Number(expense.sharedCosts) || 0;
   const total = Number(expense.amount);
@@ -286,12 +290,7 @@ export async function getItemStatus(expenseId) {
     throw new AppError('EXPENSE_NOT_FOUND', 404, 'Expense not found');
   }
 
-  // Same participant filter as recomputeAndPersist (ADR-14) — an orphaned
-  // item's amount must not make this status view disagree with the
-  // persisted status it is reporting on.
-  const participantSet = new Set(expense.participantIds);
-  const participantItems = expense.items.filter((i) => participantSet.has(i.userId));
-
+  const participantItems = filterParticipantItems(expense);
   const itemsSum = participantItems.reduce((sum, item) => sum + Number(item.amount), 0);
   const sharedCosts = Number(expense.sharedCosts) || 0;
   const total = Number(expense.amount);
