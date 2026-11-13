@@ -38,6 +38,7 @@ import {
 import { useAuth } from '../hooks/useAuth';
 import { computeSettlements } from '../utils/settlements';
 import { isPaymentAcceptanceActive } from '../utils/payments';
+import { canEditExpense, canDeleteExpense, canUnlockExpense } from '../utils/expensePermissions';
 import ExpenseForm from '../components/ExpenseForm';
 import PaymentForm from '../components/PaymentForm';
 import InviteModal from '../components/InviteModal';
@@ -1088,10 +1089,6 @@ export default function GroupDetailPage() {
                 const userItem = expenseItems.find((it) => it.userId === currentUserId);
                 const hasReported = !!userItem;
                 const isParticipant = (expense.participantIds || []).includes(currentUserId);
-                const isCreator = expense.payerId === currentUserId || expense.createdById === currentUserId;
-                const isGroupOwner = group.ownerId === currentUserId;
-                const canEditExpense = isCreator || isGroupOwner;
-                const canDeleteExpense = isCreator || isGroupOwner;
                 const isPending = expense.status === 'PENDING';
                 const isMismatch = expense.status === 'MISMATCH';
                 const isLocked = expense.isLocked === true;
@@ -1148,7 +1145,7 @@ export default function GroupDetailPage() {
                           {formatCurrency(expense.amount, currency)}
                         </span>
                         <div className="flex items-center gap-1">
-                          {canEditExpense && (
+                          {canEditExpense(expense, group, currentUserId) && (
                             <button
                               type="button"
                               onClick={() => handleEditExpense(expense)}
@@ -1158,7 +1155,7 @@ export default function GroupDetailPage() {
                               <PencilIcon className="h-3.5 w-3.5" aria-hidden="true" />
                             </button>
                           )}
-                          {canDeleteExpense && (
+                          {canDeleteExpense(expense, group, currentUserId) && (
                             <button
                               type="button"
                               onClick={() => setDeletingExpenseId(expense.id)}
@@ -1189,7 +1186,7 @@ export default function GroupDetailPage() {
                     )}
 
                     {/* COLLECTIVE: Unlock button for creator */}
-                    {isCollective && isCreator && isLocked && (
+                    {isCollective && canUnlockExpense(expense, group, currentUserId) && isLocked && (
                       <div className="mt-3">
                         <button
                           type="button"
@@ -1197,8 +1194,8 @@ export default function GroupDetailPage() {
                             try {
                               await expenseService.unlockExpense(id, expense.id);
                               loadGroup();
-                            } catch {
-                              // Silently ignore
+                            } catch (err) {
+                              alert(err.message || 'Failed to unlock expense.');
                             }
                           }}
                           className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-cta bg-cta/5 px-3 py-1.5 text-xs font-semibold text-cta transition-all duration-200 hover:bg-cta/10 focus:outline-none focus:ring-2 focus:ring-cta/30"
