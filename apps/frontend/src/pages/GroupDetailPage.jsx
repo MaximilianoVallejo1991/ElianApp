@@ -1186,7 +1186,7 @@ export default function GroupDetailPage() {
                     )}
 
                     {/* COLLECTIVE: Unlock button for creator */}
-                    {isCollective && canUnlockExpense(expense, group, currentUserId) && isLocked && (
+                    {canUnlockExpense(expense, currentUserId) && isLocked && (
                       <div className="mt-3">
                         <button
                           type="button"

@@ -25,11 +25,11 @@ describe('canDeleteExpense', () => {
 describe('canUnlockExpense', () => {
   it('allows the creator when the expense is COLLECTIVE and COMPLETED', () => {
     const expense = { createdById: 'user-1', splitType: 'COLLECTIVE', status: 'COMPLETED' };
-    expect(canUnlockExpense(expense, group, 'user-1')).toBe(true);
+    expect(canUnlockExpense(expense, 'user-1')).toBe(true);
   });
 
   it('rejects the creator when the expense is still PENDING', () => {
     const expense = { createdById: 'user-1', splitType: 'COLLECTIVE', status: 'PENDING' };
-    expect(canUnlockExpense(expense, group, 'user-1')).toBe(false);
+    expect(canUnlockExpense(expense, 'user-1')).toBe(false);
   });
 });
