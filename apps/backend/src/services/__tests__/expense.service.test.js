@@ -130,6 +130,39 @@ describe('createExpense — computeSplits re-validation (ADR-6, Fix A)', () => {
   });
 });
 
+describe('createExpense — COLLECTIVE orphan-item rejection (ADR-13, expanded scope)', () => {
+  const groupId = 'group-1';
+  const userId = 'user-1';
+  const baseGroup = { id: groupId, balanceMode: 'DYNAMIC', status: 'ACTIVE', ownerId: 'owner-1' };
+  const activeMembership = { status: 'ACTIVE', isFrozen: false };
+
+  it('rejects with INVALID_PARTICIPANTS when an item references a userId outside participantIds, creating nothing', async () => {
+    prisma.group.findUnique.mockResolvedValue(baseGroup);
+    prisma.groupMember.findUnique.mockResolvedValue(activeMembership);
+    prisma.groupMember.findMany.mockResolvedValue([{ userId: 'A' }, { userId: 'B' }]);
+
+    const data = {
+      amount: 150,
+      description: 'Dinner',
+      category: 'FOOD',
+      payerId: userId,
+      splitType: 'COLLECTIVE',
+      participantIds: ['A', 'B'],
+      items: [
+        { userId: 'A', amount: 50 },
+        { userId: 'B', amount: 50 },
+        { userId: 'D', amount: 50 }, // D is not in participantIds
+      ],
+    };
+
+    await expect(createExpense(groupId, data, userId)).rejects.toMatchObject({
+      code: 'INVALID_PARTICIPANTS',
+      status: 400,
+    });
+    expect(prisma.expense.create).not.toHaveBeenCalled();
+  });
+});
+
 describe('updateExpense — partial-update splits fallback (Fix A companion)', () => {
   const expenseId = 'expense-1';
   const groupId = 'group-1';

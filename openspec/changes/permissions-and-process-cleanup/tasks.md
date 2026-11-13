@@ -127,7 +127,24 @@ their existing backend rules" — per ponytail, nobody asked for these here):
 
 ## Phase 2: Item-Reporting Guards + Sum Fix — PR 2 `[backend]`
 
-- [ ] 2.1 [RED] `item-reporting.service.test.js` — one small test per guard, 5 deletedAt checks + 2
+**Addendum (PR 2, scope expansion confirmed in apply dispatch)** — two pieces of design.md's ADR-12
+were pulled forward into this PR instead of PR 3, because both of their dependencies
+(`assertSplitsSumToTotal`, `AppError('INVALID_PARTICIPANTS', ...)`) are created in PR 2 and neither
+needs PR 3's `assertActiveMembers`/`participantIdsAreCallerProvided` work:
+- `computeSplits`' inline sum-check (`expense.service.js` L126-129) was redirected to call the new
+  shared `assertSplitsSumToTotal` instead of keeping its own copy of the comparison — confirmed by
+  grep sweep there is now exactly ONE sum-check implementation, not two.
+- `createExpense`'s COLLECTIVE inline path (ADR-13) now rejects an `items[].userId` outside
+  `data.participantIds` with `INVALID_PARTICIPANTS` 400, with its own RED/GREEN test
+  (`expense.service.test.js`, describe `createExpense — COLLECTIVE orphan-item rejection`).
+  **Not yet done** (still PR 3's job, task 3.2's remainder): calling `assertSplitsSumToTotal` inside
+  `createExpense`'s inline split-generation block as additional defense-in-depth — ADR-13's rejection
+  already makes that guard unreachable there, so it was deliberately deferred rather than added
+  speculatively (ponytail: don't add a check nothing can currently trigger).
+- `computeSplits`' EQUAL branch, `assertActiveMembers`, `participantIdsAreCallerProvided`, and
+  `needsSplitsReconstruction` (items 4/5) were NOT touched — still entirely PR 3's job.
+
+- [x] 2.1 [RED] `item-reporting.service.test.js` — one small test per guard, 5 deletedAt checks + 2
       participant checks = 7 tests total, each proving its own specific rejection, not a cross-product
       with every other state:
       - `reportItem` → `EXPENSE_NOT_FOUND` 404 when `deletedAt !== null`
@@ -138,42 +155,46 @@ their existing backend rules" — per ponytail, nobody asked for these here):
       - `updateItem` → `NOT_PARTICIPANT` 403 for the item's own owner once removed from
         `participantIds`; 403 precedes `EXPENSE_LOCKED`
       - `deleteItem` → same
-- [ ] 2.2 [GREEN] `item-reporting.service.js`: `deletedAt` guard after the `!expense`/`!item` 404 in
+- [x] 2.2 [GREEN] `item-reporting.service.js`: `deletedAt` guard after the `!expense`/`!item` 404 in
       `reportItem` (after L32), `updateItem` (after L92), `deleteItem` (after L135), `getItemStatus`
       (after L242) (ADR-5/6/8); widen `recomputeAndPersist` (L166) to return `null` when
       `deletedAt !== null` (ADR-7)
-- [ ] 2.3 [GREEN] `item-reporting.service.js`: add `NOT_PARTICIPANT` check after the `FORBIDDEN`
+- [x] 2.3 [GREEN] `item-reporting.service.js`: add `NOT_PARTICIPANT` check after the `FORBIDDEN`
       ownership check in `updateItem` (L94-96) / `deleteItem` (L137-139) (ADR-9)
-- [ ] 2.4 [RED] ONE money-bug regression test — repro 150/[A,B]/A=50,B=50,orphan D=50 → `MISMATCH`,
+- [x] 2.4 [RED] ONE money-bug regression test — repro 150/[A,B]/A=50,B=50,orphan D=50 → `MISMATCH`,
       `expenseSplit.createMany` not called, `isLocked: false`. This is the real case; getItemStatus's
       identical filter (ADR-14) reuses the same derived `participantItems` logic and is intentionally
       NOT given its own duplicate test — one real case, not re-asserted per call site.
-- [ ] 2.5 [GREEN] `recomputeAndPersist` L170: derive `participantItems = expense.items.filter(Set(participantIds).has)`,
+- [x] 2.5 [GREEN] `recomputeAndPersist` L170: derive `participantItems = expense.items.filter(Set(participantIds).has)`,
       use for `itemsSum` AND pass to `generateSplits` (ADR-10)
-- [ ] 2.6 [GREEN] `getItemStatus` L244: apply the same `participantItems` filter (ADR-14) — no new
+- [x] 2.6 [GREEN] `getItemStatus` L244: apply the same `participantItems` filter (ADR-14) — no new
       test per 2.4's note
-- [ ] 2.7 [RED] `splits.test.js` — ONE test: sum mismatch throws `VALIDATION_ERROR` 400. Mirrors the
+- [x] 2.7 [RED] `splits.test.js` — ONE test: sum mismatch throws `VALIDATION_ERROR` 400. Mirrors the
       sibling passing-case test already in the file; no new combinatorial suite for
       `assertSplitsSumToTotal`.
-- [ ] 2.8 [GREEN] `utils/splits.js`: export `assertSplitsSumToTotal(splits, totalAmount)` (ADR-12);
+- [x] 2.8 [GREEN] `utils/splits.js`: export `assertSplitsSumToTotal(splits, totalAmount)` (ADR-12);
       `generateSplits` gains `totalAmount` param, calls it between `calculateCollectiveSplits` and
       `createMany`
-- [ ] 2.9 [infra] `src/lib/__mocks__/prisma.js`: add `expenseItem.findUnique`/`update`/`delete` stubs
+- [x] 2.9 [infra] `src/lib/__mocks__/prisma.js`: add `expenseItem.findUnique`/`update`/`delete` stubs
       (ADR-30)
-- [ ] 2.10 [docs] `errors.js` docblock: register `INVALID_PARTICIPANTS`, `EXPENSE_LOCKED`,
+- [x] 2.10 [docs] `errors.js` docblock: register `INVALID_PARTICIPANTS`, `EXPENSE_LOCKED`,
       `INVALID_SPLIT_TYPE` — zero new codes
-- [ ] 2.11 [Verify] Spec scenarios (expense-management): soft-deleted status check / report / update /
+- [x] 2.11 [Verify] Spec scenarios (expense-management): soft-deleted status check / report / update /
       delete, departed-participant orphan 403, orphan-excluded MISMATCH, inert recompute on
       soft-delete — walkthrough against 2.1/2.4's tests, no new suite
 
 ## Phase 3: expense.service.js — Orphan Rejection, Membership, Reconstruction — PR 3 `[backend]`
 
-- [ ] 3.1 [RED] ONE test: `createExpense` COLLECTIVE with an item outside `participantIds` →
+- [x] 3.1 [RED] ONE test: `createExpense` COLLECTIVE with an item outside `participantIds` →
       `INVALID_PARTICIPANTS` 400, nothing created (item 3's third and last case — PR2 covered the
-      other two)
-- [ ] 3.2 [GREEN] `createExpense` after L229-231: reject any `items[].userId` not in
-      `data.participantIds` (ADR-13); call `assertSplitsSumToTotal` after generating splits in the
-      COLLECTIVE inline block (reuse from PR 2)
+      other two) — **done in PR 2** (apply dispatch pulled ADR-13 forward; see Phase 2's addendum).
+      Test lives in `expense.service.test.js`, describe `createExpense — COLLECTIVE orphan-item
+      rejection (ADR-13, expanded scope)`.
+- [~] 3.2 [GREEN] `createExpense` after L229-231: reject any `items[].userId` not in
+      `data.participantIds` (ADR-13) — **done in PR 2**. REMAINING for this PR: call
+      `assertSplitsSumToTotal` after generating splits in the COLLECTIVE inline block (reuse from
+      PR 2) — deliberately not added in PR 2 since ADR-13's rejection already makes that guard
+      unreachable there; only the defense-in-depth call itself is still open.
 - [ ] 3.3 [RED] ONE test: EQUAL `participantIds` with a non-member/departed member →
       `INVALID_PARTICIPANTS` 400 (covers both `createExpense` and `updateExpense` call paths with one
       representative case, not one test per caller)

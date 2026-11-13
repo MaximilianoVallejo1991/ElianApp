@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   calculateEqualSplits,
   calculatePercentageSplits,
+  assertSplitsSumToTotal,
 } from '../splits.js';
 import { AppError } from '../errors.js';
 
@@ -221,5 +222,19 @@ describe('calculatePercentageSplits', () => {
     expect(() =>
       calculatePercentageSplits(100, [{ userId: 'u3', percentage: 33.34 }]),
     ).toThrow(AppError);
+  });
+});
+
+describe('assertSplitsSumToTotal', () => {
+  it('throws AppError VALIDATION_ERROR when splits do not sum to the total (mirrors the sibling passing-case test above)', () => {
+    const splits = [
+      { userId: 'u1', amount: 50 },
+      { userId: 'u2', amount: 50 },
+    ];
+
+    expect(() => assertSplitsSumToTotal(splits, 150)).toThrow(AppError);
+    expect(() => assertSplitsSumToTotal(splits, 150)).toThrow(
+      'Split amounts must sum to expense amount',
+    );
   });
 });
