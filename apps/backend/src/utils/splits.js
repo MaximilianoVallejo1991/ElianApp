@@ -133,6 +133,27 @@ export function computeCollectiveStatus(itemsSum, sharedCosts, total) {
 }
 
 /**
+ * Assert that generated splits sum to the expense total (±0.01).
+ *
+ * Extracted from expense.service.js's computeSplits (Cycle 1 ADR-6) so EVERY
+ * split-generating path carries the same backstop — the COLLECTIVE path had
+ * none, which is how orphaned items silently under-split a COMPLETED
+ * expense. Deliberately a REJECT, not a rescale: reinterpreting how much
+ * each person owes is a money decision the server must not make
+ * unilaterally.
+ *
+ * @param {Array<{ amount: number }>} splits
+ * @param {number} totalAmount
+ * @throws {AppError} VALIDATION_ERROR 400
+ */
+export function assertSplitsSumToTotal(splits, totalAmount) {
+  const computedTotal = (splits || []).reduce((sum, s) => sum + s.amount, 0);
+  if (Math.abs(computedTotal - totalAmount) > 0.01) {
+    throw new AppError('VALIDATION_ERROR', 400, 'Split amounts must sum to expense amount');
+  }
+}
+
+/**
  * Calculate COLLECTIVE splits — each participant owes their item amount
  * plus an equal share of the shared costs.
  *

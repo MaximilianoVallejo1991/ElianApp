@@ -6,6 +6,7 @@ import {
   calculatePercentageSplits,
   calculateCollectiveSplits,
   computeCollectiveStatus,
+  assertSplitsSumToTotal,
 } from '../utils/splits.js';
 import { isGroupLocked } from './closure.service.js';
 
@@ -115,18 +116,13 @@ async function computeSplits(totalAmount, splitType, splits, groupId, participan
     throw new AppError('INVALID_SPLITS', 400, 'Unknown split type');
   }
 
-  // Defense-in-depth (ADR-6): whatever branch produced them, the computed
-  // splits MUST sum to the expense amount. This is deliberately a REJECT,
-  // not a rescale — `splits`/`participantIds` are two sources of truth that
-  // can disagree, and silently reinterpreting how much each person owes is
-  // a money decision the server should not make unilaterally. Redundant
-  // with calculatePercentageSplits' own internal guard (PR 1) for the
-  // PERCENTAGE case today, but generic across split types and resilient to
-  // future changes in either pure function.
-  const computedTotal = calculatedSplits.reduce((sum, s) => sum + s.amount, 0);
-  if (Math.abs(computedTotal - totalAmount) > 0.01) {
-    throw new AppError('VALIDATION_ERROR', 400, 'Split amounts must sum to expense amount');
-  }
+  // Defense-in-depth (ADR-6, now shared via ADR-12's assertSplitsSumToTotal):
+  // whatever branch produced them, the computed splits MUST sum to the
+  // expense amount — a REJECT, not a rescale, since `splits`/`participantIds`
+  // are two sources of truth that can disagree and silently reinterpreting
+  // how much each person owes is a money decision the server should not
+  // make unilaterally.
+  assertSplitsSumToTotal(calculatedSplits, totalAmount);
 
   return calculatedSplits;
 }
@@ -231,6 +227,22 @@ export async function createExpense(groupId, data, userId) {
     }
 
     const items = data.items || [];
+
+    // ADR-13: reject (not silently exclude) any item referencing a userId
+    // outside participantIds. Both lists arrive in one request body here,
+    // so nothing legitimate produces this mismatch — rejecting prevents the
+    // permanently-unremovable orphan item (see item-reporting.service.js's
+    // NOT_PARTICIPANT guard) from ever being created.
+    const participantSet = new Set(data.participantIds);
+    for (const item of items) {
+      if (!participantSet.has(item.userId)) {
+        throw new AppError(
+          'INVALID_PARTICIPANTS',
+          400,
+          `User ${item.userId} is not a participant in this expense`,
+        );
+      }
+    }
 
     // Create COLLECTIVE expense (and items if provided) atomically
     const expense = await prisma.$transaction(async (tx) => {

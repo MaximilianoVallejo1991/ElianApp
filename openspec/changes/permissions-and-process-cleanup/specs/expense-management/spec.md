@@ -72,6 +72,16 @@ The system MUST treat `splits: []` the same as an omitted `splits` field when `u
 - WHEN payer submits `PUT /expenses/1` with `{ amount: 300, splits: [] }`
 - THEN the PERCENTAGE reconstruction query pair does not run; the update proceeds via `participantIds`-driven recomputation only
 
+### Requirement: COLLECTIVE Create Rejects Items Outside Participants
+
+The system MUST reject `POST /expenses` for a COLLECTIVE expense if any entry in `items[]` has a `userId` not present in `participantIds`, with HTTP 400 `{ code: "INVALID_PARTICIPANTS" }`. The system MUST NOT create the expense or any `ExpenseItem`/`ExpenseSplit` rows for a rejected request. This closes the same money defect as "Orphaned item is excluded and flips status to MISMATCH" (see `Validate COLLECTIVE Status` below) at its other entry point: an orphan item can corrupt the split either by surviving past creation (handled there) or by being submitted inline at creation time (handled here) — rejecting at creation is preferred over silent exclusion so the orphan never exists to need cleanup later.
+
+#### Scenario: Create COLLECTIVE expense with an item outside participantIds
+
+- GIVEN a group with active members A, B, D
+- WHEN a user submits `POST /expenses` with `{ amount: 150, splitType: "COLLECTIVE", participantIds: ["A","B"], items: [{userId:"A",amount:50},{userId:"B",amount:50},{userId:"D",amount:50}] }`
+- THEN system returns HTTP 400 `{ code: "INVALID_PARTICIPANTS" }`; no expense, item, or split is created
+
 ## MODIFIED Requirements
 
 ### Requirement: Delete Expense

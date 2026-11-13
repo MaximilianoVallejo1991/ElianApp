@@ -477,12 +477,12 @@ fork (atomic `deleteGroup` preconditions → item 7 moves first) is **not trigge
 
 ## Open Questions
 
-- [ ] **ADR-13 — `createExpense` orphan-item rejection is an API behavior change.** Found during
+- [x] **ADR-13 — `createExpense` orphan-item rejection is an API behavior change.** Found during
       this design, not in the proposal. `POST` with an `items[]` entry outside `participantIds`
-      currently returns 200 with silently wrong splits; it would now return `INVALID_PARTICIPANTS`
-      400. **Owner confirmation needed.** If declined, the fallback is ADR-13 alternative (a) —
-      silently exclude, mirroring ADR-10 — which fixes the money but creates a permanently
-      unremovable orphan at creation time. Recommendation: confirm the rejection.
+      currently returns 200 with silently wrong splits; it now returns `INVALID_PARTICIPANTS`
+      400. **Confirmed by the owner: reject.** Implemented in PR 2. (Fallback alternative (a) —
+      silently exclude, mirroring ADR-10 — was not chosen, since it fixes the money but creates
+      a permanently unremovable orphan at creation time.)
 - [ ] **Adjacent gap, found while designing item 4 — NOT designed here.** `computeSplits`'
       PERCENTAGE membership validation only runs inside the `if (participantIds && length > 0)`
       gate (L99). A PERCENTAGE request with explicit `splits` and **no** `participantIds` validates

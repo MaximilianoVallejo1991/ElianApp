@@ -1,6 +1,10 @@
 import prisma from '../lib/prisma.js';
 import { AppError } from '../utils/errors.js';
-import { calculateCollectiveSplits, computeCollectiveStatus } from '../utils/splits.js';
+import {
+  calculateCollectiveSplits,
+  computeCollectiveStatus,
+  assertSplitsSumToTotal,
+} from '../utils/splits.js';
 
 // ---------------------------------------------------------------------------
 //  Item Reporting Service
@@ -8,6 +12,16 @@ import { calculateCollectiveSplits, computeCollectiveStatus } from '../utils/spl
 //  Domain logic for COLLECTIVE expense item reporting:
 //  report, update, delete items; recompute status; generate splits.
 // ---------------------------------------------------------------------------
+
+// ONE derived set feeds both the status view (getItemStatus) and the
+// persisted computation (recomputeAndPersist), so they can't disagree on
+// which items count. An item whose owner is no longer in participantIds is
+// already dropped by calculateCollectiveSplits — counting it here is what
+// let a COMPLETED expense persist splits that miss the total (ADR-10).
+function filterParticipantItems(expense) {
+  const participantSet = new Set(expense.participantIds);
+  return expense.items.filter((i) => participantSet.has(i.userId));
+}
 
 /**
  * Report (upsert) an item for a COLLECTIVE expense.
@@ -28,6 +42,12 @@ export async function reportItem(expenseId, userId, amount, description) {
   });
 
   if (!expense) {
+    throw new AppError('EXPENSE_NOT_FOUND', 404, 'Expense not found');
+  }
+
+  // A soft-deleted expense must be indistinguishable from a missing one
+  // (mirrors unlockExpense), so it cannot leak existence via this path.
+  if (expense.deletedAt !== null) {
     throw new AppError('EXPENSE_NOT_FOUND', 404, 'Expense not found');
   }
 
@@ -91,8 +111,19 @@ export async function updateItem(itemId, userId, amount, description) {
     throw new AppError('ITEM_NOT_FOUND', 404, 'Item not found');
   }
 
+  if (item.expense.deletedAt !== null) {
+    throw new AppError('EXPENSE_NOT_FOUND', 404, 'Expense not found');
+  }
+
   if (item.userId !== userId) {
     throw new AppError('FORBIDDEN', 403, 'You can only update your own item');
+  }
+
+  // Authorization-before-state (mirrors reportItem's ordering): a user
+  // removed from participantIds after reporting an item must be rejected
+  // here even if the expense is also locked — the item is now an orphan.
+  if (!item.expense.participantIds.includes(userId)) {
+    throw new AppError('NOT_PARTICIPANT', 403, 'Only participants can update items');
   }
 
   if (item.expense.isLocked) {
@@ -134,8 +165,16 @@ export async function deleteItem(itemId, userId) {
     throw new AppError('ITEM_NOT_FOUND', 404, 'Item not found');
   }
 
+  if (item.expense.deletedAt !== null) {
+    throw new AppError('EXPENSE_NOT_FOUND', 404, 'Expense not found');
+  }
+
   if (item.userId !== userId) {
     throw new AppError('FORBIDDEN', 403, 'You can only delete your own item');
+  }
+
+  if (!item.expense.participantIds.includes(userId)) {
+    throw new AppError('NOT_PARTICIPANT', 403, 'Only participants can delete items');
   }
 
   if (item.expense.isLocked) {
@@ -163,11 +202,12 @@ export async function recomputeAndPersist(expenseId) {
     include: { items: true },
   });
 
-  if (!expense || expense.splitType !== 'COLLECTIVE') {
+  if (!expense || expense.deletedAt !== null || expense.splitType !== 'COLLECTIVE') {
     return null;
   }
 
-  const itemsSum = expense.items.reduce((sum, item) => sum + Number(item.amount), 0);
+  const participantItems = filterParticipantItems(expense);
+  const itemsSum = participantItems.reduce((sum, item) => sum + Number(item.amount), 0);
   const sharedCosts = Number(expense.sharedCosts) || 0;
   const total = Number(expense.amount);
 
@@ -180,7 +220,7 @@ export async function recomputeAndPersist(expenseId) {
         data: { status: 'COMPLETED', isLocked: true },
       });
 
-      await generateSplits(tx, expenseId, expense.items, sharedCosts, expense.participantIds);
+      await generateSplits(tx, expenseId, participantItems, sharedCosts, expense.participantIds, total);
     });
   } else {
     await prisma.expense.update({
@@ -203,9 +243,10 @@ export async function recomputeAndPersist(expenseId) {
  * @param {Array} items — ExpenseItem records
  * @param {number} sharedCosts
  * @param {string[]} participantIds
+ * @param {number} totalAmount — expense total, for the sum guard (ADR-12)
  * @returns {Promise<void>}
  */
-async function generateSplits(tx, expenseId, items, sharedCosts, participantIds) {
+async function generateSplits(tx, expenseId, items, sharedCosts, participantIds, totalAmount) {
   // Delete existing splits
   await tx.expenseSplit.deleteMany({ where: { expenseId } });
 
@@ -214,6 +255,10 @@ async function generateSplits(tx, expenseId, items, sharedCosts, participantIds)
     sharedCosts,
     participantIds,
   );
+
+  // Defense-in-depth (ADR-12): the COLLECTIVE path had no sum guard, which is
+  // how an orphaned item silently under-split a COMPLETED expense.
+  assertSplitsSumToTotal(splits, totalAmount);
 
   await tx.expenseSplit.createMany({
     data: splits.map((s) => ({
@@ -241,7 +286,12 @@ export async function getItemStatus(expenseId) {
     throw new AppError('EXPENSE_NOT_FOUND', 404, 'Expense not found');
   }
 
-  const itemsSum = expense.items.reduce((sum, item) => sum + Number(item.amount), 0);
+  if (expense.deletedAt !== null) {
+    throw new AppError('EXPENSE_NOT_FOUND', 404, 'Expense not found');
+  }
+
+  const participantItems = filterParticipantItems(expense);
+  const itemsSum = participantItems.reduce((sum, item) => sum + Number(item.amount), 0);
   const sharedCosts = Number(expense.sharedCosts) || 0;
   const total = Number(expense.amount);
   const discrepancy = Math.round((itemsSum + sharedCosts - total) * 100) / 100;

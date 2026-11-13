@@ -24,6 +24,9 @@ import { vi } from 'vitest';
  * `payment.service.js` still calls the unguarded `payment.update`
  * until PR 3 lands; do not assume `payment.updateMany` being stubbed
  * here means payments are already guarded.
+ * `expenseItem.findUnique`/`update`/`delete` were added in PR 2 of
+ * `permissions-and-process-cleanup` for `updateItem`/`deleteItem` guard
+ * coverage.
  */
 const prisma = {
   group: {
@@ -56,6 +59,9 @@ const prisma = {
   },
   expenseItem: {
     upsert: vi.fn(),
+    findUnique: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
   },
   payment: {
     count: vi.fn(),
