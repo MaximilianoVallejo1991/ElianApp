@@ -80,7 +80,8 @@ export async function update(req, res) {
  * DELETE /groups/:id  (PROTECTED)
  *
  * Only the group owner can delete. Ownership checked in the service.
- * Prisma cascade removes all memberships automatically.
+ * Period rows are deleted explicitly before the Group row to control lock
+ * order (ADR-21); Prisma cascade still handles memberships and the rest.
  */
 export async function remove(req, res) {
   await groupService.deleteGroup(req.params.id, req.user.userId);

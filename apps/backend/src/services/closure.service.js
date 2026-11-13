@@ -422,11 +422,8 @@ export async function finalClosure(groupId, userId) {
     // call's count is 0, so the whole tx rolls back before the group's
     // status is ever touched.
     //
-    // This order is the inverse of deleteGroup's cascade (Group -> Period),
-    // a known, accepted lock-order inversion — see design.md's "Lock Order
-    // Audit" before changing it. Worst case is a 40P01 deadlock abort on
-    // one side, zero data corruption; the real fix belongs to deleteGroup
-    // and is out of scope here.
+    // deleteGroup now takes the same Period-before-Group lock order — see
+    // design.md's "Item 6 — lock order" (ADR-21/22).
     const guard = await tx.period.updateMany({
       where: { id: period.id, status: 'CLOSING' },
       data: {

@@ -27,12 +27,15 @@ import { vi } from 'vitest';
  * `expenseItem.findUnique`/`update`/`delete` were added in PR 2 of
  * `permissions-and-process-cleanup` for `updateItem`/`deleteItem` guard
  * coverage. `expenseItem.createMany` was added in PR 3 for
- * `createExpense`'s COLLECTIVE inline item-creation path.
+ * `createExpense`'s COLLECTIVE inline item-creation path. `group.delete` and
+ * `period.deleteMany` were added in PR 4 for `deleteGroup`'s new
+ * `$transaction` (ADR-30).
  */
 const prisma = {
   group: {
     findUnique: vi.fn(),
     update: vi.fn(),
+    delete: vi.fn(),
   },
   groupMember: {
     findUnique: vi.fn(),
@@ -44,6 +47,7 @@ const prisma = {
     findUnique: vi.fn(),
     update: vi.fn(),
     updateMany: vi.fn(),
+    deleteMany: vi.fn(),
     create: vi.fn(),
   },
   expense: {

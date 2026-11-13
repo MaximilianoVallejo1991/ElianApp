@@ -274,5 +274,12 @@ export async function deleteGroup(groupId, userId) {
     );
   }
 
-  await prisma.group.delete({ where: { id: groupId } });
+  // Explicit transaction: deletes Period rows before the Group row so the
+  // row-lock order matches closure.service.js's finalClosure (Period before
+  // Group) instead of the opposite order the FK cascade produces on a bare
+  // `group.delete` — see design.md's "Item 6 — lock order" (ADR-21/22).
+  await prisma.$transaction(async (tx) => {
+    await tx.period.deleteMany({ where: { groupId } });
+    await tx.group.delete({ where: { id: groupId } });
+  });
 }
