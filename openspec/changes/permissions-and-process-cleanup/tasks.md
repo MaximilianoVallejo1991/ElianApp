@@ -277,20 +277,22 @@ destructive, data-loss operation, so bare-minimum coverage of its core precondit
 even under ponytail's stricter discipline. Not exhaustive coverage of every pre-existing branch this
 change does not touch.
 
-- [ ] 4.1 [RED] Create `group.service.test.js`: `deleteGroup` runs inside `$transaction`;
+- [x] 4.1 [RED] Create `group.service.test.js`: `deleteGroup` runs inside `$transaction`;
       `invocationCallOrder` proves `period.deleteMany` before `group.delete` — the actual fix being
       tested
-- [ ] 4.2 [GREEN] `group.service.js` L277: replace bare `prisma.group.delete` with
+- [x] 4.2 [GREEN] `group.service.js` L277: replace bare `prisma.group.delete` with
       `prisma.$transaction(async (tx) => { await tx.period.deleteMany({ where: { groupId } }); await tx.group.delete({ where: { id: groupId } }); })`
       (ADR-21)
-- [ ] 4.3 [RED] ONE basic happy-path test: `deleteGroup` succeeds end-to-end when preconditions pass
-- [ ] 4.4 [RED] ONE precondition test: `deleteGroup` still refuses (409) before the transaction opens
+- [x] 4.3 [RED] ONE basic happy-path test: `deleteGroup` succeeds end-to-end when preconditions pass
+- [x] 4.4 [RED] ONE precondition test: `deleteGroup` still refuses (409) before the transaction opens
       when an active-expense/payment precondition fails — proves the existing guard logic survives,
       one representative case, not a test per pre-existing branch
-- [ ] 4.5 [docs] `closure.service.js` L425-429: delete the stale lock-order comment, replace with a
+- [x] 4.5 [docs] `closure.service.js` L425-429: delete the stale lock-order comment, replace with a
       one-line pointer to design's lock-order section, same commit (ADR-25)
-- [ ] 4.6 [infra] prisma mock: add `group.delete`, `period.deleteMany` stubs (ADR-30)
-- [ ] 4.7 [Verify] Spec scenario (group-management): "Period rows are deleted before the Group row"
+- [x] 4.6 [infra] prisma mock: add `group.delete`, `period.deleteMany` stubs (ADR-30)
+- [x] 4.7 [Verify] Spec scenario (group-management): "Period rows are deleted before the Group row" —
+      covered by task 4.1's test (service-level `$transaction` + `invocationCallOrder` proof); full
+      suite green: `pnpm --filter backend test` 91/91, `pnpm --filter frontend test` 50/50.
 
 ## Phase 5: assertAtomicTransition Extraction — PR 5 `[backend]`
 
