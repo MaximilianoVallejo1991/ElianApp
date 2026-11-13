@@ -67,6 +67,30 @@ async function getActiveMemberIds(groupId) {
 }
 
 /**
+ * Validate that every id in `userIds` is a currently active member of
+ * `groupId`, throwing on the first offender (iteration order preserved —
+ * ADR-18). No-ops on an empty/nullish list.
+ *
+ * Shared by `computeSplits`' EQUAL branch (only when the caller explicitly
+ * supplied `participantIds` — see `participantIdsAreCallerProvided`) and its
+ * PERCENTAGE branch (unconditionally) — one validator, not a copy per branch
+ * (item 4).
+ *
+ * @param {string} groupId
+ * @param {string[]} userIds
+ * @throws {AppError} INVALID_PARTICIPANTS 400
+ */
+async function assertActiveMembers(groupId, userIds) {
+  if (!userIds || userIds.length === 0) return;
+  const activeMemberSet = new Set(await getActiveMemberIds(groupId));
+  for (const userId of userIds) {
+    if (!activeMemberSet.has(userId)) {
+      throw new AppError('INVALID_PARTICIPANTS', 400, `User ${userId} is not an active group member`);
+    }
+  }
+}
+
+/**
  * Compute the split array based on expense amount, split type, and input splits.
  *
  * @param {number} totalAmount
@@ -74,9 +98,21 @@ async function getActiveMemberIds(groupId) {
  * @param {Array<{ userId: string, amount?: number, percentage?: number }>} splits
  * @param {string} groupId — needed to fetch active members for EQUAL splits
  * @param {string[]} [participantIds] — optional list of specific participant IDs
+ * @param {{ participantIdsAreCallerProvided?: boolean }} [options] — fail-closed
+ *   default `true` (item 4/ADR-16): only `updateExpense`'s internal
+ *   reconstruction fallback passes `false`, since that list is already
+ *   filtered to active members and re-validating it would 400 a `PUT
+ *   { amount }` on any expense with a departed participant.
  * @returns {Promise<Array<{ userId: string, amount: number, percentage?: number }>>}
  */
-async function computeSplits(totalAmount, splitType, splits, groupId, participantIds) {
+async function computeSplits(
+  totalAmount,
+  splitType,
+  splits,
+  groupId,
+  participantIds,
+  { participantIdsAreCallerProvided = true } = {},
+) {
   validateSplits(totalAmount, splitType, splits);
 
   let calculatedSplits;
@@ -85,6 +121,10 @@ async function computeSplits(totalAmount, splitType, splits, groupId, participan
     let memberIds;
 
     if (participantIds && participantIds.length > 0) {
+      // Validate only a caller-supplied list — never a reconstructed one.
+      if (participantIdsAreCallerProvided) {
+        await assertActiveMembers(groupId, participantIds);
+      }
       // Use the provided participant IDs directly
       memberIds = participantIds;
     } else {
@@ -100,16 +140,13 @@ async function computeSplits(totalAmount, splitType, splits, groupId, participan
     if (participantIds && participantIds.length > 0) {
       const participantSet = new Set(participantIds);
       filteredSplits = splits.filter((s) => participantSet.has(s.userId));
-
-      // Validate all remaining split userIds are active group members
-      const activeMemberSet = new Set(await getActiveMemberIds(groupId));
-
-      for (const split of filteredSplits) {
-        if (!activeMemberSet.has(split.userId)) {
-          throw new AppError('INVALID_PARTICIPANTS', 400, `User ${split.userId} is not an active group member`);
-        }
-      }
     }
+
+    // Validate every remaining split's userId against active membership —
+    // unconditionally, not just when participantIds was supplied, so a
+    // request with explicit splits and no participantIds is still checked
+    // (adjacent gap, item 4 fold-in).
+    await assertActiveMembers(groupId, filteredSplits.map((s) => s.userId));
 
     calculatedSplits = calculatePercentageSplits(totalAmount, filteredSplits);
   } else {
@@ -286,6 +323,13 @@ export async function createExpense(groupId, data, userId) {
             sharedCosts,
             data.participantIds,
           );
+
+          // Defense-in-depth (ADR-12), same guard as generateSplits and
+          // computeSplits: reject, don't persist, if the generated splits
+          // don't sum to the total. ADR-13's rejection above already makes
+          // this unreachable for an orphan item specifically, but the guard
+          // is shared across every split-generating path, not just that one.
+          assertSplitsSumToTotal(splits, total);
 
           await tx.expenseSplit.deleteMany({ where: { expenseId: newExpense.id } });
 
@@ -595,6 +639,12 @@ export async function updateExpense(expenseId, data, userId) {
     // silently expands EQUAL to every active member).
     let effectiveParticipantIds = data.participantIds;
     let effectiveSplitsInput = data.splits;
+    // Fail-closed default (ADR-16/17): flipped to `false` only on the exact
+    // line below where the reconstruction fallback overwrites
+    // effectiveParticipantIds — that list is already active-filtered, so
+    // re-validating it would 400 a `PUT { amount }` on any expense with a
+    // departed participant.
+    let participantIdsAreCallerProvided = true;
 
     if (effectiveSplitType === 'COLLECTIVE') {
       // computeSplits has no COLLECTIVE branch — it always throws
@@ -629,8 +679,13 @@ export async function updateExpense(expenseId, data, userId) {
       // `expenseSplit.findMany` + `getActiveMemberIds` query pair entirely
       // (third addendum, Fix 2) instead of running it just to build a
       // `splits` array `computeSplits` throws away for EQUAL anyway.
+      // Item 5: treat an explicit EMPTY splits array the same as omitted,
+      // mirroring participantIdsNotProvided above — `PUT { amount, splits: [] }`
+      // on a PERCENTAGE expense must reconstruct from persisted data, not
+      // fail closed with INVALID_SPLITS. The `!== 'EQUAL'` gate stays the
+      // FIRST conjunct so EQUAL still short-circuits before the array test.
       const needsSplitsReconstruction =
-        effectiveSplitType !== 'EQUAL' && effectiveSplitsInput === undefined;
+        effectiveSplitType !== 'EQUAL' && (!effectiveSplitsInput || effectiveSplitsInput.length === 0);
 
       // EQUAL always needs effectiveParticipantIds — it is EQUAL's only
       // source of membership. PERCENTAGE only needs it to SCOPE a
@@ -685,6 +740,7 @@ export async function updateExpense(expenseId, data, userId) {
           }
 
           effectiveParticipantIds = reconstructedParticipantIds;
+          participantIdsAreCallerProvided = false;
         }
 
         if (needsSplitsReconstruction) {
@@ -718,6 +774,7 @@ export async function updateExpense(expenseId, data, userId) {
       effectiveSplitsInput,
       existing.groupId,
       effectiveParticipantIds,
+      { participantIdsAreCallerProvided },
     );
 
     // Delete old splits and create new ones in a transaction

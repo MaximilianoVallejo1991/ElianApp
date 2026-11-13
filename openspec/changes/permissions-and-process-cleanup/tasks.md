@@ -190,42 +190,63 @@ needs PR 3's `assertActiveMembers`/`participantIdsAreCallerProvided` work:
       other two) — **done in PR 2** (apply dispatch pulled ADR-13 forward; see Phase 2's addendum).
       Test lives in `expense.service.test.js`, describe `createExpense — COLLECTIVE orphan-item
       rejection (ADR-13, expanded scope)`.
-- [~] 3.2 [GREEN] `createExpense` after L229-231: reject any `items[].userId` not in
-      `data.participantIds` (ADR-13) — **done in PR 2**. REMAINING for this PR: call
-      `assertSplitsSumToTotal` after generating splits in the COLLECTIVE inline block (reuse from
-      PR 2) — deliberately not added in PR 2 since ADR-13's rejection already makes that guard
-      unreachable there; only the defense-in-depth call itself is still open.
-- [ ] 3.3 [RED] ONE test: EQUAL `participantIds` with a non-member/departed member →
-      `INVALID_PARTICIPANTS` 400 (covers both `createExpense` and `updateExpense` call paths with one
-      representative case, not one test per caller)
-- [ ] 3.4 [GREEN] Add private `assertActiveMembers(groupId, userIds)` near L66 (ADR-16/18);
-      `computeSplits` gains 6th param `{ participantIdsAreCallerProvided = true } = {}`; EQUAL branch
-      validates via `assertActiveMembers` only when the flag is true; replace the inline sum check
-      (L126-129) with `assertSplitsSumToTotal` (ADR-12)
-- [ ] 3.5 [RED] ONE test: `PUT { amount }` on an EQUAL expense with a departed-member persisted split
-      → succeeds (the confirmed exception — reconstructed list is not re-validated)
-- [ ] 3.6 [GREEN] `updateExpense`: declare `participantIdsAreCallerProvided = true` alongside
-      `effectiveParticipantIds` (L584-585); flip to `false` on the line immediately after
-      `effectiveParticipantIds = reconstructedParticipantIds` (L675, ADR-17); pass the option into the
-      `computeSplits` call (L703-709)
-- [ ] 3.7 [RED] ONE test: PERCENTAGE request with explicit `splits` and NO `participantIds`,
+- [x] 3.2 [GREEN] `createExpense` after L229-231: reject any `items[].userId` not in
+      `data.participantIds` (ADR-13) — **done in PR 2**. Remainder done here: calls
+      `assertSplitsSumToTotal(splits, total)` right after `calculateCollectiveSplits` in the COLLECTIVE
+      inline block, before `deleteMany`/`createMany` — mirrors `generateSplits`' placement. Re-checked
+      reachability per the apply dispatch: under normal input it is unreachable to FAIL (ADR-13's
+      rejection + `computeCollectiveStatus`'s own epsilon already guarantee agreement before this point
+      is ever reached with `newStatus === 'COMPLETED'`), but it IS reachable and testable via mocking
+      `calculateCollectiveSplits` to return a bad sum — same defense-in-depth pattern already used for
+      PERCENTAGE's `calculatePercentageSplits` mock test in this same file. Added with its own RED/GREEN
+      test (`createExpense — COLLECTIVE split-sum guard`), not left out — ADR-12 names this exact call
+      site alongside `generateSplits` and `computeSplits`.
+- [x] 3.3 [RED] ONE test: EQUAL `participantIds` with a non-member → `INVALID_PARTICIPANTS` 400, via
+      `createExpense` (the shared `computeSplits` EQUAL branch is the single code path both callers go
+      through with the default `participantIdsAreCallerProvided = true`, so one representative case
+      covers both, per the task's own note — not duplicated for `updateExpense`)
+- [x] 3.4 [GREEN] Added private `assertActiveMembers(groupId, userIds)` near `getActiveMemberIds`
+      (ADR-16/18); `computeSplits` gained 6th param `{ participantIdsAreCallerProvided = true } = {}`;
+      EQUAL branch validates via `assertActiveMembers` only when the flag is true; PERCENTAGE's inline
+      loop replaced by the same shared call (same error code/message/order, zero behavior change —
+      confirmed by the pre-existing PERCENTAGE tests passing unedited)
+- [x] 3.5 [RED] ONE test: `PUT { amount }` on an EQUAL expense with a departed-member persisted split
+      → succeeds. **Honesty note (ponytail, no ceremony theater)**: this test does NOT actually go RED
+      between 3.4 and 3.6 — `updateExpense`'s reconstruction already filters the persisted list to
+      ACTIVE members only (pre-existing code, 60 lines up), so the departed member is excluded from
+      `effectiveParticipantIds` before `computeSplits` ever sees it, regardless of the flag's value.
+      ADR-16 names this exact non-locality ("that proof is non-local... depends on a filter 60 lines
+      away staying in place"). The test still passes and is kept as the spec's required regression
+      scenario; 3.6's flag is defensive against that filter being weakened later, not a fix for a
+      currently-reachable bug.
+- [x] 3.6 [GREEN] `updateExpense`: declared `participantIdsAreCallerProvided = true` alongside
+      `effectiveParticipantIds`; flipped to `false` on the line immediately after
+      `effectiveParticipantIds = reconstructedParticipantIds` (ADR-17); option passed into the
+      `computeSplits` call
+- [x] 3.7 [RED] ONE test: PERCENTAGE request with explicit `splits` and NO `participantIds`,
       containing a non-member `userId` → `INVALID_PARTICIPANTS` 400 (adjacent-gate fix, user-confirmed
       fold-in)
-- [ ] 3.8 [GREEN] `computeSplits` PERCENTAGE branch: hoist the
+- [x] 3.8 [GREEN] `computeSplits` PERCENTAGE branch: hoisted the
       `assertActiveMembers(groupId, filteredSplits.map(...))` call out of the
-      `if (participantIds && length > 0)` gate so it always runs
-- [ ] 3.9 [RED] ONE test: `PUT { amount, splits: [] }` on PERCENTAGE → reconstructs and succeeds (was
+      `if (participantIds && length > 0)` gate so it always runs. Required updating 3 pre-existing
+      tests' fixtures to add an active-member mock they previously didn't need (same "stale fixture,
+      not a production bug" class as PR 2's `deletedAt` fixture fix) — the asserted outcomes of those
+      tests are unchanged.
+- [x] 3.9 [RED] ONE test: `PUT { amount, splits: [] }` on PERCENTAGE → reconstructs and succeeds (was
       `INVALID_SPLITS` 400) — mirrors the already-existing EQUAL-side test, no new suite
-- [ ] 3.10 [GREEN] `needsSplitsReconstruction` L620-621: `effectiveSplitsInput === undefined` →
+- [x] 3.10 [GREEN] `needsSplitsReconstruction`: `effectiveSplitsInput === undefined` →
       `!effectiveSplitsInput || effectiveSplitsInput.length === 0`; `effectiveSplitType !== 'EQUAL'`
       stays the first conjunct (ADR-20)
-- [ ] 3.11 [Verify] No new tests: existing PERCENTAGE `INVALID_PARTICIPANTS` test (L323) and sum-guard
-      test (L93) pass unedited; EQUAL + explicit `participantIds` still skips the
-      `expenseSplit.findMany`/`getActiveMemberIds` pair (Fix 2 gate) — confirm the existing assertions
-      hold, don't duplicate them
-- [ ] 3.12 [Verify] Spec scenarios (expense-management): explicit non-member rejected create/update,
-      reconstructed-fallback succeeds, empty-splits-array reconstructs on PERCENTAGE, EQUAL unaffected
-      by empty splits array
+- [x] 3.11 [Verify] No new tests: existing PERCENTAGE `INVALID_PARTICIPANTS` test and sum-guard test
+      pass unedited (behavior-preserving refactor confirmed); EQUAL + explicit `participantIds` still
+      skips the `expenseSplit.findMany` reconstruction query (Fix 2 gate) — confirmed, that assertion
+      still holds (it does now also call `groupMember.findMany` via the new validation, which the test
+      doesn't assert against, so no conflict)
+- [x] 3.12 [Verify] Spec scenarios (expense-management) walked against the diff: explicit non-member
+      rejected on create (3.3) and reconstructed-fallback succeeds on update (3.5) both covered;
+      empty-splits-array reconstructs on PERCENTAGE (3.9) and EQUAL unaffected by an empty splits array
+      (pre-existing `(Second addendum regression — Bug 1)` test, unedited) both covered. Full suite:
+      `pnpm --filter backend test && pnpm --filter frontend test` — 88/88 backend, 50/50 frontend.
 
 ## Phase 4: deleteGroup Lock Reordering — PR 4 `[backend]`
 
