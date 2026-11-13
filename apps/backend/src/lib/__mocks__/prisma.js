@@ -26,7 +26,8 @@ import { vi } from 'vitest';
  * here means payments are already guarded.
  * `expenseItem.findUnique`/`update`/`delete` were added in PR 2 of
  * `permissions-and-process-cleanup` for `updateItem`/`deleteItem` guard
- * coverage.
+ * coverage. `expenseItem.createMany` was added in PR 3 for
+ * `createExpense`'s COLLECTIVE inline item-creation path.
  */
 const prisma = {
   group: {
@@ -62,6 +63,7 @@ const prisma = {
     findUnique: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
+    createMany: vi.fn(),
   },
   payment: {
     count: vi.fn(),

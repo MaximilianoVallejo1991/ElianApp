@@ -18,11 +18,12 @@ vi.mock('../../utils/splits.js', async (importOriginal) => {
   return {
     ...actual,
     calculatePercentageSplits: vi.fn(actual.calculatePercentageSplits),
+    calculateCollectiveSplits: vi.fn(actual.calculateCollectiveSplits),
   };
 });
 
 import prisma from '../../lib/prisma.js';
-import { calculatePercentageSplits } from '../../utils/splits.js';
+import { calculatePercentageSplits, calculateCollectiveSplits } from '../../utils/splits.js';
 import { createExpense, updateExpense } from '../expense.service.js';
 
 beforeEach(() => {
@@ -71,6 +72,11 @@ describe('createExpense — computeSplits re-validation (ADR-6, Fix A)', () => {
   it('rejects via the generic amount-sum guard when calculatePercentageSplits returns a mismatched sum (defense-in-depth, Fix A)', async () => {
     prisma.group.findUnique.mockResolvedValue(baseGroup);
     prisma.groupMember.findUnique.mockResolvedValue(activeMembership);
+    // Item 4's adjacent-gap fix (3.7/3.8) now validates membership for every
+    // PERCENTAGE request, even without participantIds — both splits' userIds
+    // must be active members for this test to reach the sum guard it exists
+    // to prove.
+    prisma.groupMember.findMany.mockResolvedValue([{ userId: 'u1' }, { userId: 'u2' }]);
 
     calculatePercentageSplits.mockReturnValueOnce([
       { userId: 'u1', amount: 10, percentage: 50 },
@@ -99,6 +105,8 @@ describe('createExpense — computeSplits re-validation (ADR-6, Fix A)', () => {
   it('still creates a valid PERCENTAGE expense when the (unfiltered) splits correctly sum to the amount', async () => {
     prisma.group.findUnique.mockResolvedValue(baseGroup);
     prisma.groupMember.findUnique.mockResolvedValue(activeMembership);
+    // Item 4's adjacent-gap fix now validates membership unconditionally.
+    prisma.groupMember.findMany.mockResolvedValue([{ userId: 'u1' }, { userId: 'u2' }]);
     prisma.expense.create.mockResolvedValue({ id: 'expense-1' });
 
     const data = {
@@ -152,6 +160,112 @@ describe('createExpense — COLLECTIVE orphan-item rejection (ADR-13, expanded s
         { userId: 'A', amount: 50 },
         { userId: 'B', amount: 50 },
         { userId: 'D', amount: 50 }, // D is not in participantIds
+      ],
+    };
+
+    await expect(createExpense(groupId, data, userId)).rejects.toMatchObject({
+      code: 'INVALID_PARTICIPANTS',
+      status: 400,
+    });
+    expect(prisma.expense.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('createExpense — COLLECTIVE split-sum guard (ADR-12, defense-in-depth, task 3.2)', () => {
+  const groupId = 'group-1';
+  const userId = 'user-1';
+  const baseGroup = { id: groupId, balanceMode: 'DYNAMIC', status: 'ACTIVE', ownerId: 'owner-1' };
+  const activeMembership = { status: 'ACTIVE', isFrozen: false };
+
+  it('rejects via the generic amount-sum guard when calculateCollectiveSplits returns a mismatched sum', async () => {
+    // Items pass ADR-13's rejection (both inside participantIds) and sum to
+    // the total, so the COMPLETED branch runs calculateCollectiveSplits —
+    // mocked here to simulate a latent bug in that pure function, proving
+    // assertSplitsSumToTotal (shared with computeSplits/generateSplits)
+    // catches it independently, same pattern as the PERCENTAGE test above.
+    prisma.group.findUnique.mockResolvedValue(baseGroup);
+    prisma.groupMember.findUnique.mockResolvedValue(activeMembership);
+    prisma.groupMember.findMany.mockResolvedValue([{ userId: 'A' }, { userId: 'B' }]);
+    prisma.expense.create.mockResolvedValue({ id: 'expense-1' });
+
+    calculateCollectiveSplits.mockReturnValueOnce([
+      { userId: 'A', amount: 50 },
+      { userId: 'B', amount: 50 },
+    ]);
+
+    const data = {
+      amount: 150,
+      description: 'Dinner',
+      category: 'FOOD',
+      payerId: userId,
+      splitType: 'COLLECTIVE',
+      participantIds: ['A', 'B'],
+      items: [
+        { userId: 'A', amount: 75 },
+        { userId: 'B', amount: 75 },
+      ],
+    };
+
+    await expect(createExpense(groupId, data, userId)).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      status: 400,
+    });
+    expect(prisma.expenseSplit.createMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('createExpense — EQUAL membership validation (item 4, ADR-16)', () => {
+  const groupId = 'group-1';
+  const userId = 'user-1';
+  const baseGroup = { id: groupId, balanceMode: 'DYNAMIC', status: 'ACTIVE', ownerId: 'owner-1' };
+  const activeMembership = { status: 'ACTIVE', isFrozen: false };
+
+  it('rejects an EQUAL expense whose participantIds contains a non-member (covers both createExpense and updateExpense call paths — one shared computeSplits code path, one representative case)', async () => {
+    prisma.group.findUnique.mockResolvedValue(baseGroup);
+    prisma.groupMember.findUnique.mockResolvedValue(activeMembership);
+    prisma.groupMember.findMany.mockResolvedValue([
+      { userId: 'u1' },
+      { userId: 'u2' },
+      { userId: 'u3' },
+    ]);
+
+    const data = {
+      amount: 90,
+      description: 'Dinner',
+      category: 'FOOD',
+      payerId: userId,
+      splitType: 'EQUAL',
+      participantIds: ['u1', 'u2', 'u4'], // u4 is not an active member
+    };
+
+    await expect(createExpense(groupId, data, userId)).rejects.toMatchObject({
+      code: 'INVALID_PARTICIPANTS',
+      status: 400,
+    });
+    expect(prisma.expense.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('createExpense — PERCENTAGE adjacent membership gap (item 4, user-confirmed fold-in)', () => {
+  const groupId = 'group-1';
+  const userId = 'user-1';
+  const baseGroup = { id: groupId, balanceMode: 'DYNAMIC', status: 'ACTIVE', ownerId: 'owner-1' };
+  const activeMembership = { status: 'ACTIVE', isFrozen: false };
+
+  it('rejects a PERCENTAGE expense with explicit splits and NO participantIds when a split references a non-member', async () => {
+    prisma.group.findUnique.mockResolvedValue(baseGroup);
+    prisma.groupMember.findUnique.mockResolvedValue(activeMembership);
+    prisma.groupMember.findMany.mockResolvedValue([{ userId: 'u1' }, { userId: 'u2' }]);
+
+    const data = {
+      amount: 100,
+      description: 'Dinner',
+      category: 'FOOD',
+      payerId: userId,
+      splitType: 'PERCENTAGE',
+      splits: [
+        { userId: 'u1', percentage: 50 },
+        { userId: 'u9', percentage: 50 }, // u9 is not a member; no participantIds supplied
       ],
     };
 
@@ -242,6 +356,9 @@ describe('updateExpense — partial-update splits fallback (Fix A companion)', (
       splitType: 'PERCENTAGE',
     });
     prisma.group.findUnique.mockResolvedValue({ ownerId: 'owner-1' });
+    // Item 4's adjacent-gap fix now validates every explicit split's userId
+    // against active membership, even with no participantIds in the body.
+    prisma.groupMember.findMany.mockResolvedValue([{ userId: 'u9' }]);
     prisma.expenseSplit.deleteMany.mockResolvedValue({ count: 0 });
     prisma.expense.update.mockResolvedValue({ id: expenseId });
 
@@ -519,6 +636,10 @@ describe('updateExpense — partial-update splits fallback (Fix A companion)', (
       splitType: 'EQUAL',
     });
     prisma.group.findUnique.mockResolvedValue({ ownerId: 'owner-1' });
+    // Item 4: EQUAL now validates a caller-provided participantIds against
+    // active membership (participantIdsAreCallerProvided defaults true here —
+    // this call is NOT the reconstruction path).
+    prisma.groupMember.findMany.mockResolvedValue([{ userId: 'u1' }, { userId: 'u3' }]);
     prisma.expenseSplit.deleteMany.mockResolvedValue({ count: 2 });
     prisma.expense.update.mockResolvedValue({ id: expenseId });
 
@@ -568,6 +689,66 @@ describe('updateExpense — partial-update splits fallback (Fix A companion)', (
             create: [
               { userId: 'u1', amount: 60, percentage: 60 },
               { userId: 'u2', amount: 40, percentage: 40 },
+            ],
+          },
+        }),
+      }),
+    );
+  });
+
+  it('(item 4, ADR-16 exception) PUT { amount } on an EQUAL expense succeeds when a persisted split still references a member who has since left the group — reconstruction already excludes them before any membership validation runs', async () => {
+    prisma.expense.findUnique.mockResolvedValue({
+      ...baseExisting,
+      amount: 100,
+      splitType: 'EQUAL',
+    });
+    prisma.group.findUnique.mockResolvedValue({ ownerId: 'owner-1' });
+    prisma.expenseSplit.findMany.mockResolvedValue([
+      { userId: 'u1', amount: 50, percentage: null },
+      { userId: 'u2', amount: 50, percentage: null },
+    ]);
+    // u2 has left the group — only u1 remains active.
+    prisma.groupMember.findMany.mockResolvedValue([{ userId: 'u1' }]);
+    prisma.expenseSplit.deleteMany.mockResolvedValue({ count: 2 });
+    prisma.expense.update.mockResolvedValue({ id: expenseId });
+
+    await updateExpense(expenseId, { amount: 200 }, userId);
+
+    expect(prisma.expense.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          splits: { create: [{ userId: 'u1', amount: 200, percentage: null }] },
+        }),
+      }),
+    );
+  });
+
+  it('(item 5) PUT { amount, splits: [] } on a PERCENTAGE expense reconstructs from persisted splits instead of failing closed with INVALID_SPLITS', async () => {
+    prisma.expense.findUnique.mockResolvedValue({
+      ...baseExisting,
+      amount: 100,
+      splitType: 'PERCENTAGE',
+    });
+    prisma.group.findUnique.mockResolvedValue({ ownerId: 'owner-1' });
+    prisma.expenseSplit.findMany.mockResolvedValue([
+      { userId: 'u1', amount: 60, percentage: 60 },
+      { userId: 'u2', amount: 40, percentage: 40 },
+    ]);
+    prisma.groupMember.findMany.mockResolvedValue([{ userId: 'u1' }, { userId: 'u2' }]);
+    prisma.expenseSplit.deleteMany.mockResolvedValue({ count: 2 });
+    prisma.expense.update.mockResolvedValue({ id: expenseId });
+
+    await updateExpense(expenseId, { amount: 300, splits: [] }, userId);
+
+    expect(prisma.expenseSplit.findMany).toHaveBeenCalledWith({ where: { expenseId } });
+    expect(prisma.expense.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          amount: 300,
+          splits: {
+            create: [
+              { userId: 'u1', amount: 180, percentage: 60 },
+              { userId: 'u2', amount: 120, percentage: 40 },
             ],
           },
         }),
