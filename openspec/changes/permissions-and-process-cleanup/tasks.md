@@ -248,6 +248,28 @@ needs PR 3's `assertActiveMembers`/`participantIdsAreCallerProvided` work:
       (pre-existing `(Second addendum regression — Bug 1)` test, unedited) both covered. Full suite:
       `pnpm --filter backend test && pnpm --filter frontend test` — 88/88 backend, 50/50 frontend.
 
+**Addendum (PR 3, post-apply code review)** — 3 real findings, none a correctness bug, triaged:
+
+1. **NOT fixed, needs its own careful TDD pass, not a quick edit** — `participantIdsAreCallerProvided` is
+   honored by the EQUAL branch (skips re-validation on a reconstructed list) but ignored by PERCENTAGE's
+   `assertActiveMembers` call, which always re-runs even on reconstructed data — a wasted `groupMember.findMany`
+   on every `PUT { amount }`-style PERCENTAGE reconstruction. The obvious fix (gate PERCENTAGE's call on the
+   same flag) is riskier than it looks: the flag tracks whether `participantIds` was reconstructed, but
+   PERCENTAGE's validation target is `filteredSplits`' userIds — and `splits` and `participantIds` can be
+   reconstructed independently of each other (e.g. caller sends explicit `participantIds` but omits `splits`).
+   Blindly reusing the flag here could skip a validation that still matters, or reject a legitimately
+   reconstructed case. Deferred to a dedicated fix with its own RED/GREEN cases covering the independent
+   reconstruction combinations, not folded into this PR.
+2. **NOT fixed, deliberately out of scope** — `createExpense`'s COLLECTIVE path still validates membership
+   with its own hand-rolled `groupMember.findMany` + length check instead of the new shared `assertActiveMembers`.
+   Consolidating risks silently dropping its incidental duplicate-`userId` detection, which `assertActiveMembers`
+   doesn't do. Real duplication, but not a bug today — noted for a future cleanup, not rushed here.
+3. **Accepted, not fixed** — two findings about `computeSplits` trusting `participantIdsAreCallerProvided: false`
+   via a doc comment with no internal assertion, and the flag being a separately-tracked `let` that could drift
+   from `effectiveParticipantIds`'s reassignment if a future caller/branch is added carelessly. Both are
+   speculative hardening against hypothetical future misuse with no current caller that triggers either risk —
+   per `ponytail`, not building for a future nobody asked for.
+
 ## Phase 4: deleteGroup Lock Reordering — PR 4 `[backend]`
 
 Two to four small tests total — this is the first test file `deleteGroup` has ever had, and it is a
