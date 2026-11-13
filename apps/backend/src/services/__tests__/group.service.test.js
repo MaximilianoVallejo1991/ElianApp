@@ -38,12 +38,6 @@ describe('deleteGroup', () => {
     );
   });
 
-  it('succeeds end-to-end when all preconditions pass', async () => {
-    mockPreconditionsPass();
-
-    await expect(deleteGroup(groupId, ownerId)).resolves.toBeUndefined();
-  });
-
   it('still refuses with GROUP_HAS_DATA 409 before the transaction opens when the group has active expenses', async () => {
     prisma.group.findUnique.mockResolvedValue({ id: groupId, ownerId });
     prisma.expense.count.mockResolvedValue(1);

@@ -294,6 +294,46 @@ change does not touch.
       covered by task 4.1's test (service-level `$transaction` + `invocationCallOrder` proof); full
       suite green: `pnpm --filter backend test` 91/91, `pnpm --filter frontend test` 50/50.
 
+**Addendum (PR 4, post-apply code review)** — 2 real findings, fixed directly (trivial):
+- `group.controller.js`'s doc comment above `remove` said cascade handles everything, with no mention
+  that Period rows are now deleted explicitly to control lock order — a future reader could "simplify"
+  `deleteGroup` back to a bare `prisma.group.delete()` and silently reintroduce the Group-before-Period
+  order this PR fixes. Updated to point at ADR-21.
+- `group.service.test.js`'s "succeeds end-to-end when all preconditions pass" test was redundant with
+  4.1's lock-order test — both use identical `mockPreconditionsPass()` and the lock-order test's
+  unwrapped `await` already proves the happy path resolves. Removed; 4.1 and the precondition-failure
+  test now cover task 4.3's intent between them (2 tests total, not 3 — still inside ponytail's 2-4
+  budget for this item). Full suite after removal: `pnpm --filter backend test` 90/90.
+
+Deliberately NOT fixed (genuine findings, but out of item 6's scope — "reorder deleteGroup's locks,"
+not "make deleteGroup's preconditions atomic" or "add new business rules"):
+- `deleteGroup`'s `GROUP_HAS_DATA` precondition counts are read before `$transaction` opens and never
+  re-asserted inside it (unlike closure.service.js's atomic `updateMany`+count guards). A record created
+  in the gap between the count read and commit gets silently cascade-deleted. **Pre-existing** — the old
+  bare `prisma.group.delete()` had the identical gap; wrapping in a transaction didn't introduce or
+  worsen it. Real bug, needs its own ADR for precondition atomicity, not bundled into a lock-order PR.
+- `tx.group.delete` has no P2025 handling for a concurrent double-delete race. **Pre-existing** — the
+  old single-statement delete had the same exposure; `error.middleware.js` already only special-cases
+  `AppError`/P2002 for every other service, not just this one.
+- `error.middleware.js` has no handling for P2028 (timeout) / P2034 (deadlock), which `deleteGroup` can
+  now throw for the first time now that it's an interactive `$transaction`. Real gap, but it's the same
+  gap closure.service.js's Cycle 2 transactions already have — a middleware-wide fix, not scoped to this
+  item.
+- Splitting one cascade statement into two sequential ones inside the transaction adds wall-clock time
+  against Prisma's default 5s interactive-transaction timeout. Speculative at current data volumes
+  (periods/expenses per group); not hardening against a risk nobody has hit.
+- A `deleteGroup`/closure-function race could make `closure.service.js`'s `CLOSURE_BLOCKED` guard report
+  "period no longer in CLOSING/OPEN status" when the real cause is the period being deleted mid-flight.
+  Misleading message only (still a correct 409, not silent corruption) — not worth widening item 6's
+  diff to disambiguate.
+
+**Raised to the user, decided not worth tracking**: a CLOSED (`finalClosure`'d) group can still be
+deleted once its historical records are soft-deleted to zero — `deleteGroup` only checks ownership and
+active counts, never `group.status`. Confirmed in code (not just the review's claim), but the user's
+call: deletion is an explicit, separate destructive owner action from closure, and closure's
+"irreversible" docstring is about blocking new activity, not about blocking deletion. Not a bug, no
+follow-up item.
+
 ## Phase 5: assertAtomicTransition Extraction — PR 5 `[backend]`
 
 Item 7 is the one genuinely concurrency-critical item — money/security-class, per ponytail's own
