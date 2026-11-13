@@ -107,6 +107,24 @@ call sites (the 4 existing Cycle 2 suites are the proof there).
       "Payer who is not creator does not see unlock control", "Refused unlock surfaces a visible
       error", "Payer who is not creator or owner no longer sees delete control"
 
+**Addendum (PR 1, post-apply code review)** — fixed in commit `abd9bca`: removed `canUnlockExpense`'s
+unused `group` param (risked a future "fix" granting owners unlock rights the backend doesn't allow),
+removed the redundant `isCollective` check in `GroupDetailPage.jsx`'s JSX gate (duplicated what
+`canUnlockExpense` already checks internally), fixed JSDoc comments that pinned exact backend line
+numbers, and removed a CAPS-emphasis comment per this project's no-persona-emphasis rule.
+
+Deliberately NOT fixed (genuine findings, but expand scope beyond "align these 3 frontend actions to
+their existing backend rules" — per ponytail, nobody asked for these here):
+- `group?.ownerId === currentUserId` is duplicated across 7 call sites in the codebase (not just this
+  PR's 2). A shared `isGroupOwner(group, userId)` helper is a real improvement but belongs to its own
+  small follow-up, not bundled into this fix.
+- `canDeletePayment` (`GroupDetailPage.jsx` ~L570) has the identical actor-or-owner shape as the new
+  `canDeleteExpense` but was left inline — consistent with "don't touch what wasn't asked," not an
+  oversight.
+- Backend authorization rules are never exposed on the expense API response, so the frontend must
+  hand-maintain a duplicate synced only by a comment. The deeper fix (compute `canEdit`/`canDelete`/
+  `canUnlock` server-side, return them on the expense object) is an API-shape change, out of scope here.
+
 ## Phase 2: Item-Reporting Guards + Sum Fix — PR 2 `[backend]`
 
 - [ ] 2.1 [RED] `item-reporting.service.test.js` — one small test per guard, 5 deletedAt checks + 2
