@@ -1,5 +1,6 @@
 import prisma from '../lib/prisma.js';
 import { AppError } from '../utils/errors.js';
+import { assertAtomicTransition } from '../utils/transitions.js';
 import { isGroupLocked } from './closure.service.js';
 
 // ---------------------------------------------------------------------------
@@ -301,14 +302,12 @@ export async function acceptPayment(paymentId, userId) {
   return prisma.$transaction(async (tx) => {
     // Atomic guard: re-assert PENDING inside the write. A concurrent caller
     // that passed the same read-check above loses here with count 0.
-    const guard = await tx.payment.updateMany({
+    await assertAtomicTransition(tx.payment, {
       where: { id: paymentId, status: 'PENDING', deletedAt: null },
       data: { status: 'ACCEPTED' },
+      errorCode: 'NOT_PENDING',
+      errorMessage: 'Payment is not in PENDING status',
     });
-
-    if (guard.count !== 1) {
-      throw new AppError('NOT_PENDING', 409, 'Payment is not in PENDING status');
-    }
 
     // Our write holds the row lock until commit, so this read returns our
     // own transition — `updateMany` cannot return the row itself, and
@@ -372,17 +371,15 @@ export async function rejectPayment(paymentId, userId, rejectionReason) {
   return prisma.$transaction(async (tx) => {
     // Atomic guard: re-assert PENDING inside the write. A concurrent caller
     // that passed the same read-check above loses here with count 0.
-    const guard = await tx.payment.updateMany({
+    await assertAtomicTransition(tx.payment, {
       where: { id: paymentId, status: 'PENDING', deletedAt: null },
       data: {
         status: 'REJECTED',
         rejectionReason: rejectionReason || null,
       },
+      errorCode: 'NOT_PENDING',
+      errorMessage: 'Payment is not in PENDING status',
     });
-
-    if (guard.count !== 1) {
-      throw new AppError('NOT_PENDING', 409, 'Payment is not in PENDING status');
-    }
 
     // Our write holds the row lock until commit, so this read returns our
     // own transition — `updateMany` cannot return the row itself, and

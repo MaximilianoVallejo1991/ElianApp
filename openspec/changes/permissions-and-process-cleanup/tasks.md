@@ -342,25 +342,33 @@ carve-out. It still gets its check. But the check is on the NEW helper only: the
 new combinatorial per-site barrier suite is written (dropping the prior draft's planned
 `transition-helper-concurrency.test.js`, ~250 lines, entirely).
 
-- [ ] 5.1 [RED] `transitions.test.js`: `count: 1` resolves without throwing
-- [ ] 5.2 [RED] `transitions.test.js`: `count: 0` and `count: 2` both throw the caller's exact
+- [x] 5.1 [RED] `transitions.test.js`: `count: 1` resolves without throwing
+- [x] 5.2 [RED] `transitions.test.js`: `count: 0` and `count: 2` both throw the caller's exact
       `errorCode` + message at 409
-- [ ] 5.3 [RED] `transitions.test.js`: `where`/`data` are forwarded verbatim, including
+- [x] 5.3 [RED] `transitions.test.js`: `where`/`data` are forwarded verbatim, including
       `deletedAt: null` — the one real risk in this item (a helper that drops the payment sites' soft-
       delete predicate), test it directly
-- [ ] 5.4 [GREEN] Create `apps/backend/src/utils/transitions.js`:
+- [x] 5.4 [GREEN] Create `apps/backend/src/utils/transitions.js`:
       `assertAtomicTransition(delegate, { where, data, errorCode, errorMessage })` (ADR-26/27)
-- [ ] 5.5 [GREEN] `closure.service.js`: retrofit `startClosure` (L185-192), `completeClosure`
+- [x] 5.5 [GREEN] `closure.service.js`: retrofit `startClosure` (L185-192), `completeClosure`
       (L255-264), `partialClosure` (L343-352), `finalClosure` (L430-441) — helper as the FIRST
       statement, `where`/`data` unchanged
-- [ ] 5.6 [GREEN] `payment.service.js`: retrofit `acceptPayment` (L304-309), `rejectPayment`
+- [x] 5.6 [GREEN] `payment.service.js`: retrofit `acceptPayment` (L304-309), `rejectPayment`
       (L375-383), preserving `deletedAt: null` in `where` (ADR-27)
-- [ ] 5.7 [Verify — ZERO-LINE DIFF, this IS the regression proof] `closure-concurrency.test.js`,
+- [x] 5.7 [Verify — ZERO-LINE DIFF, this IS the regression proof] `closure-concurrency.test.js`,
       `payment-concurrency.test.js`, `concurrency-barrier.test.js`, `soft-delete-filters.test.js` pass
       unedited. If any requires an edit to pass: STOP, revert the retrofit — do not adapt the test, and
-      do not write a replacement combinatorial suite instead
-- [ ] 5.8 [Verify] Grep sweep: no inline `updateMany` + `count !== 1` pair remains in
-      `closure.service.js` or `payment.service.js`
+      do not write a replacement combinatorial suite instead. Confirmed via
+      `git diff main -- apps/backend/src/services/__tests__/closure-concurrency.test.js
+      apps/backend/src/services/__tests__/payment-concurrency.test.js
+      apps/backend/src/services/__tests__/concurrency-barrier.test.js
+      apps/backend/src/services/__tests__/soft-delete-filters.test.js` → empty. Full suite:
+      `pnpm --filter backend test` 93/93 (90 baseline + 3 new helper tests), `pnpm --filter frontend
+      test` 50/50.
+- [x] 5.8 [Verify] Grep sweep: no inline `updateMany` + `count !== 1` pair remains in
+      `closure.service.js` or `payment.service.js` — confirmed, only comments mentioning `updateMany`
+      remain (explaining why the follow-up `findUnique` is needed), all six sites now call
+      `assertAtomicTransition` as their first transaction statement.
 
 ## Phase 6: Final Verification (after all 5 PRs merged)
 

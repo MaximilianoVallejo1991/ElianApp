@@ -1,5 +1,6 @@
 import prisma from '../lib/prisma.js';
 import { AppError } from '../utils/errors.js';
+import { assertAtomicTransition } from '../utils/transitions.js';
 
 // ---------------------------------------------------------------------------
 //  Closure Service
@@ -182,14 +183,12 @@ export async function startClosure(groupId, userId) {
   return prisma.$transaction(async (tx) => {
     // Atomic guard: re-assert OPEN inside the write. A concurrent caller that
     // passed the same read-check above loses here with count 0.
-    const guard = await tx.period.updateMany({
+    await assertAtomicTransition(tx.period, {
       where: { id: period.id, status: 'OPEN' },
       data: { status: 'CLOSING' },
+      errorCode: 'CLOSURE_BLOCKED',
+      errorMessage: 'Period is no longer in OPEN status',
     });
-
-    if (guard.count !== 1) {
-      throw new AppError('CLOSURE_BLOCKED', 409, 'Period is no longer in OPEN status');
-    }
 
     // Our write holds the row lock until commit, so this read returns our own
     // transition — `updateMany` cannot return the row itself.
@@ -252,18 +251,16 @@ export async function completeClosure(groupId, userId) {
   return prisma.$transaction(async (tx) => {
     // Atomic guard: re-assert CLOSING inside the write. A concurrent caller
     // that passed the same read-check above loses here with count 0.
-    const guard = await tx.period.updateMany({
+    await assertAtomicTransition(tx.period, {
       where: { id: period.id, status: 'CLOSING' },
       data: {
         status: 'CLOSED',
         isCurrent: false,
         closedAt: new Date(),
       },
+      errorCode: 'CLOSURE_BLOCKED',
+      errorMessage: 'Period is no longer in CLOSING status',
     });
-
-    if (guard.count !== 1) {
-      throw new AppError('CLOSURE_BLOCKED', 409, 'Period is no longer in CLOSING status');
-    }
 
     // Our write holds the row lock until commit, so this read returns our own
     // transition — `updateMany` cannot return the row itself.
@@ -340,18 +337,16 @@ export async function partialClosure(groupId, userId) {
     // function's test, not by this comment — see
     // `closure-concurrency.test.js`'s `invocationCallOrder` assertion,
     // which fails if a future edit moves another write ahead of this one.
-    const guard = await tx.period.updateMany({
+    await assertAtomicTransition(tx.period, {
       where: { id: period.id, status: 'CLOSING' },
       data: {
         status: 'CLOSED',
         isCurrent: false,
         closedAt: new Date(),
       },
+      errorCode: 'CLOSURE_BLOCKED',
+      errorMessage: 'Period is no longer in CLOSING status',
     });
-
-    if (guard.count !== 1) {
-      throw new AppError('CLOSURE_BLOCKED', 409, 'Period is no longer in CLOSING status');
-    }
 
     // Create new OPEN period. No follow-up read: `create` already returns
     // the row we need, and this function never touches `Group` (no
@@ -424,18 +419,16 @@ export async function finalClosure(groupId, userId) {
     //
     // deleteGroup now takes the same Period-before-Group lock order — see
     // design.md's "Item 6 — lock order" (ADR-21/22).
-    const guard = await tx.period.updateMany({
+    await assertAtomicTransition(tx.period, {
       where: { id: period.id, status: 'CLOSING' },
       data: {
         status: 'FINAL',
         isCurrent: false,
         closedAt: new Date(),
       },
+      errorCode: 'CLOSURE_BLOCKED',
+      errorMessage: 'Period is no longer in CLOSING status',
     });
-
-    if (guard.count !== 1) {
-      throw new AppError('CLOSURE_BLOCKED', 409, 'Period is no longer in CLOSING status');
-    }
 
     // Mark group as permanently closed. Runs only if the guard above won.
     await tx.group.update({
