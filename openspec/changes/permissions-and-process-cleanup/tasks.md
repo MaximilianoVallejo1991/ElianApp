@@ -386,18 +386,40 @@ new combinatorial per-site barrier suite is written (dropping the prior draft's 
       `deleteItem`, `recomputeAndPersist`, `getItemStatus`) check `deletedAt !== null` (or the
       combined `!expense || expense.deletedAt !== null` short-circuit in `recomputeAndPersist`) before
       any further read/write — no path bypasses the guard.
-- [x] 6.4 **Substituted — no reachable real Postgres in this environment.** Docker daemon is not
-      running here (`docker ps` fails: "failed to connect to the docker API"), and
-      `prisma db pull --print` against the configured `localhost:5433` returns `P1001: Can't reach
-      database server`. Per the task's own fallback instruction, did NOT fake/simulate a real-stack
-      repro. Validated instead via the PR2 mocked regression test
-      (`apps/backend/src/services/__tests__/item-reporting.service.test.js`, describe block
-      `recomputeAndPersist — deletedAt guard and orphan-item sum fix (items 2/3, ADR-10)`, test
-      "excludes an orphaned item (no longer in participantIds) from itemsSum, landing on MISMATCH
-      instead of a falsely COMPLETED status with under-summed splits") — re-ran in isolation, 11/11
-      passed. Asserts exactly the ADR-10/13 scenario: orphan item excluded from `itemsSum`, status
-      becomes `MISMATCH`, `expenseSplit.createMany` never called. This is a reasonable substitute per
-      PR2's own verify report trace of the same scenario, but it is NOT a real-Postgres confirmation —
-      flagged as a residual gap for whoever next has DB access, not closed with full confidence.
-- [x] 6.5 **Skipped — depends on 6.4's real DB connection, which is unavailable.** No detection query
-      was run; nothing informational to report. Clean skip, no backfill attempted either way.
+- [x] 6.4 **Re-run against the real stack — PASS.** Docker (`splitwise-db`, postgres:16-alpine) came
+      up on port 5433; `prisma migrate status` confirmed schema up to date, no pending migrations.
+      Built a one-off script (not committed) that calls the REAL `createExpense`, `reportItem`,
+      `recomputeAndPersist`, `getItemStatus` from `expense.service.js`/`item-reporting.service.js`
+      against the real DB (not raw SQL, not mocked): created a throwaway group with 4 users
+      (owner, A, B, D); COLLECTIVE expense `amount=150, sharedCosts=0, participantIds=[A,B]`; A and
+      B each reported a real 50 via `reportItem`; D's 50 was inserted directly via
+      `prisma.expenseItem.create` (D is NOT in `participantIds` — `reportItem` would 403 D with
+      `NOT_PARTICIPANT`, so this is the only way to produce the orphan row, simulating ADR-15's
+      "pre-existing orphan" case) then `recomputeAndPersist` was called for real. Result: final
+      `expense.status = MISMATCH`, `isLocked = false`, **zero** `ExpenseSplit` rows persisted, all 3
+      `ExpenseItem` rows (including D's orphan) still present and inert, `getItemStatus().itemsSum
+      = 100` (not 150). All 5 assertions passed against the live DB. Cleanup: deleted the expense,
+      its items/splits, the group, its memberships, and all 4 users in FK-safe order immediately
+      after the run — verified via a follow-up query (`email LIKE 'verify-%'`, `name LIKE
+      'verify-group-%'`) that **zero** rows remain; no pre-existing data was touched.
+      **Flagging a framing mismatch, as instructed (loudly, not papered over):** the dispatch
+      description for this task said the orphan item would be "still counted toward the 'is this
+      expense complete' total — so the expense status lands on MISMATCH (150 items reported vs 100
+      in splits)". That is **not** what the merged code actually does. `filterParticipantItems`
+      (the ADR-10 fix) excludes the orphan from **both** `itemsSum` **and** the splits input — not
+      just the splits. The real measured `itemsSum` is **100**, never 150; the status is `MISMATCH`
+      because `itemsSum (100) != total (150)` (the expense is genuinely incomplete), not because of
+      a 150-vs-100 items-vs-splits inconsistency. The outcome the task cares about — no false
+      `COMPLETED`, no under-summed `ExpenseSplit` rows persisted — is 100% confirmed correct against
+      a real DB. The specific "150 vs 100" numeric framing in the dispatch does not match the
+      current (already-fixed) code's internal accounting and should not be repeated as the
+      mechanism in future write-ups; this real-stack run is also a **stronger** result than the
+      PR2 mocked test, which already asserted `itemsSum === 100` correctly — the mocked test was
+      accurate, the task dispatch's prose summary of it was the part that drifted.
+- [x] 6.5 **Re-run against the real stack — PASS (informational, zero findings).** Ran ADR-15's
+      detection query verbatim from `design.md` (`SELECT i."expenseId" FROM "ExpenseItem" i JOIN
+      "Expense" e ON e.id = i."expenseId" WHERE e."splitType" = 'COLLECTIVE' AND NOT
+      (i."userId" = ANY(e."participantIds"));`) as a read-only `$queryRawUnsafe` SELECT against the
+      real dev DB. Result: **0 rows** — no pre-existing orphaned `ExpenseItem` rows exist in this
+      database today. No backfill attempted (none needed, none was in scope). Purely informational,
+      consistent with ADR-15's forward-fix-only decision.
