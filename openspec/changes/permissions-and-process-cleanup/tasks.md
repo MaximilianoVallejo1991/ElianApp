@@ -372,11 +372,32 @@ new combinatorial per-site barrier suite is written (dropping the prior draft's 
 
 ## Phase 6: Final Verification (after all 5 PRs merged)
 
-- [ ] 6.1 Run `pnpm --filter backend test && pnpm --filter frontend test` — full suite green
-- [ ] 6.2 Run `pnpm -r run build` — passes
-- [ ] 6.3 Grep sweep: no `isCreator` remains in `GroupDetailPage.jsx`; no unguarded `deletedAt` path
-      remains in `item-reporting.service.js`
-- [ ] 6.4 Run the ADR-10/13 money-bug repro against the real stack (not mocked); confirm `MISMATCH`
-      and zero persisted splits before merge, per Migration/Rollout step 4
-- [ ] 6.5 Optional: run ADR-15's detection query for pre-existing orphans (informational only —
-      forward-fix only, no backfill)
+- [x] 6.1 Run `pnpm --filter backend test && pnpm --filter frontend test` — full suite green.
+      Confirmed on `main` (all 5 PRs merged, tip `6c03a81`): backend 93/93 (9 test files), frontend
+      50/50 (4 test files). Matches PR5's baseline exactly — zero regression across the merge.
+- [x] 6.2 Run `pnpm -r run build` — passes. Frontend `vite build` succeeds (454 modules, built in
+      ~3.2s); backend has no `build` script (test-only package, pre-existing, not a gap introduced by
+      this change). Pre-existing cosmetic warnings only (one Tailwind `!&::-webkit-outer-spin-button`
+      empty-selector warning, one >500kB chunk-size warning) — both predate this change and are
+      unrelated to items 1-7.
+- [x] 6.3 Grep sweep: no `isCreator` remains in `GroupDetailPage.jsx`; no unguarded `deletedAt` path
+      remains in `item-reporting.service.js`. Confirmed via grep (zero matches for `isCreator`) and by
+      reading the full file: all 5 functions that read an `Expense` row (`reportItem`, `updateItem`,
+      `deleteItem`, `recomputeAndPersist`, `getItemStatus`) check `deletedAt !== null` (or the
+      combined `!expense || expense.deletedAt !== null` short-circuit in `recomputeAndPersist`) before
+      any further read/write — no path bypasses the guard.
+- [x] 6.4 **Substituted — no reachable real Postgres in this environment.** Docker daemon is not
+      running here (`docker ps` fails: "failed to connect to the docker API"), and
+      `prisma db pull --print` against the configured `localhost:5433` returns `P1001: Can't reach
+      database server`. Per the task's own fallback instruction, did NOT fake/simulate a real-stack
+      repro. Validated instead via the PR2 mocked regression test
+      (`apps/backend/src/services/__tests__/item-reporting.service.test.js`, describe block
+      `recomputeAndPersist — deletedAt guard and orphan-item sum fix (items 2/3, ADR-10)`, test
+      "excludes an orphaned item (no longer in participantIds) from itemsSum, landing on MISMATCH
+      instead of a falsely COMPLETED status with under-summed splits") — re-ran in isolation, 11/11
+      passed. Asserts exactly the ADR-10/13 scenario: orphan item excluded from `itemsSum`, status
+      becomes `MISMATCH`, `expenseSplit.createMany` never called. This is a reasonable substitute per
+      PR2's own verify report trace of the same scenario, but it is NOT a real-Postgres confirmation —
+      flagged as a residual gap for whoever next has DB access, not closed with full confidence.
+- [x] 6.5 **Skipped — depends on 6.4's real DB connection, which is unavailable.** No detection query
+      was run; nothing informational to report. Clean skip, no backfill attempted either way.
