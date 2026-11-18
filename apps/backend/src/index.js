@@ -19,8 +19,23 @@ import { cleanupExpiredInviteTokens } from './services/invite.service.js';
 const app = express();
 
 // --- Global middleware -------------------------------------------------------
+// CORS_ORIGIN soporta una lista separada por comas (ej. el dominio de Vercel
+// + un dominio custom) — un string simple en `origin` hace que `cors` devuelva
+// siempre ese mismo valor fijo sin comparar contra el Origin real del request,
+// lo que bloquea cualquier otro origen aunque esté "permitido" de palabra.
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN,
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 app.use(express.json());
