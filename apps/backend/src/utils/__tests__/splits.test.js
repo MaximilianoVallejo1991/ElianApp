@@ -164,11 +164,10 @@ describe('calculatePercentageSplits', () => {
 
   it('rescales percentages within epsilon tolerance so cents still sum exactly to the total', () => {
     // Reviewer-found regression: percentages summing to 100.0066 (within the
-    // 0.01 epsilon tolerance, so the sum guard passes) must NOT feed raw
-    // percentages into the cents math — that would make the distributed cents
-    // overshoot totalCents and corrupt leftoverCents (potentially negative or
-    // larger than splits.length, which `order.slice(0, leftoverCents)` would
-    // silently mis-handle). Normalizing to exactly 100 first fixes this.
+    // 0.01 epsilon tolerance, so the sum guard passes) must still land on
+    // exactly totalCents. apportionCents divides each weight by weightSum
+    // internally, which is equivalent to rescaling to exactly 100 first —
+    // there is no separate normalization step to get wrong.
     const result = calculatePercentageSplits(10000, [
       { userId: 'u1', percentage: 60.0033 },
       { userId: 'u2', percentage: 40.0033 },

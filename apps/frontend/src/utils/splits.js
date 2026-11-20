@@ -31,9 +31,12 @@ function apportionCents(totalCents, weights) {
   const order = weights
     .map((_, i) => i)
     .sort((a, b) => remainders[b] - remainders[a] || a - b);
-  const bumped = new Set(order.slice(0, leftover));
 
-  return floors.map((c, i) => c + (bumped.has(i) ? 1 : 0));
+  const result = floors.slice();
+  for (let k = 0; k < leftover; k++) {
+    result[order[k]] += 1;
+  }
+  return result;
 }
 
 /**

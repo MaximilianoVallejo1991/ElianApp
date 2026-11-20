@@ -104,3 +104,54 @@ parity-broken intermediate commit (ADR-8).
       `318` cents for both cases.
 - [x] 3.5 Delete all test data created in 3.4 (expense, splits, items, group, memberships,
       throwaway users) in FK-safe order; verify zero rows remain via a follow-up query
+
+**Addendum (post-apply code review)** — fixed directly (trivial, zero behavior change, full
+suite re-run green at 101/101 + 52/52):
+- `apportionCents`'s remainder-bump step simplified from sort→Set→`.has()` to a direct loop
+  bumping the first `leftover` sorted indices — same result, fewer chained allocations, intent
+  visible in one line. Applied identically in both `splits.js` files.
+- A stale test comment in `splits.test.js` still described the deleted `normalizedPercentages`
+  two-step rescale ("normalizing to exactly 100 first"); updated to describe what actually
+  happens now (`apportionCents` divides by `weightSum` directly, no separate rescale step).
+
+Deliberately NOT fixed (genuine findings, but out of this change's scope — "fix the remainder
+bug," not "harden every call site against hypothetical future misuse" or "fix pre-existing,
+unrelated issues this PR happened to touch nearby"):
+- `apportionCents` has no runtime guard for its own documented precondition (weights sum > 0,
+  all finite >= 0) — design ADR-2 already proved every current caller upholds it externally,
+  and ponytail + that ADR's own reasoning says not to add a guard nothing can currently trigger.
+  A future caller violating the precondition is a real risk, but guarding against a hypothetical
+  future caller that doesn't exist yet is exactly the speculative hardening this project avoids.
+- `calculatePercentageSplits` throws the sum-mismatch error message even when the real failure
+  is a negative percentage with a sum that happens to still equal 100. Pre-existing (not
+  introduced here), and changing a thrown error message is its own behavior change needing its
+  own test updates — not bundled into an arithmetic-remainder fix.
+- No automated check that `apportionCents` stays byte-identical between backend and frontend.
+  Design ADR-5 explicitly decided parity stays manual, same commit, same PR — not an oversight,
+  a stated tradeoff this change already made.
+- `calculateCollectiveSplits` converts `sharedCents[i]` back to a float and re-rounds when adding
+  `itemAmount` — a half-migration back to float math, but the trailing `Math.round` keeps it
+  correct; a cleaner full-cents version is a quality nit, not a bug.
+- `apportionCents`'s 5-pass-plus-sort approach is more expensive than a closed-form formula for
+  equal weights, or a top-k selection instead of a full sort. At realistic group sizes
+  (dozens, not thousands) this is immaterial — premature optimization for a problem no one has.
+- A `toCents()` helper was suggested for the 3x-repeated `Math.round(x * 100)` idiom per file.
+  Rejected, not just deferred: this project's own convention is "three similar lines is better
+  than a premature abstraction."
+
+Rejected outright, not deferred: one review finding suggested EQUAL/COLLECTIVE should use a
+closed-form equal-split formula instead of routing through `apportionCents` with all-1s weights.
+This is the opposite of this change's actual goal — design ADR-1 and this cycle's whole point was
+consolidating 3 independent remainder implementations into 1 shared primitive specifically to
+stop this bug class from being fixed once and silently reintroduced elsewhere. Special-casing
+EQUAL/COLLECTIVE back to their own formula would recreate exactly that structural problem.
+
+**Raised to the user, deferred**: `apps/frontend/src/components/ExpenseForm.jsx` (lines ~87 and
+~713) has its own inline naive-division preview calculation for EQUAL/COLLECTIVE splits, never
+calling `calculateEqualSplits`/`calculateCollectiveSplits` at all — so the preview shown while
+composing an expense can differ by a cent from what actually gets persisted. Confirmed this
+predates this PR (the preview never reflected the old "last absorbs the remainder" behavior
+either) — not a regression this change introduced, and `ExpenseForm.jsx` was never in this
+change's Affected Areas. User's call: track as a separate follow-up rather than expanding this
+PR's scope to a UI file with its own tests. Not tracked as a formal backlog item yet — just
+recorded here for whoever next touches `ExpenseForm.jsx`'s split preview.
