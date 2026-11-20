@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   calculateEqualSplits,
   calculatePercentageSplits,
+  calculateCollectiveSplits,
   assertSplitsSumToTotal,
 } from '../splits.js';
 import { AppError } from '../errors.js';
@@ -25,17 +26,18 @@ describe('calculateEqualSplits', () => {
     expect(result[1]).toEqual({ userId: 'u2', amount: 50 });
   });
 
-  it('handles rounding — last member absorbs the remainder', () => {
+  it('handles rounding — remainder cent goes to the lowest tied index', () => {
     const result = calculateEqualSplits(100, ['u1', 'u2', 'u3']);
-    // 100 / 3 = 33.33..., so first two get 33.33, last gets 33.34
+    // 100 / 3 = 33.33..., all three remainders tie, so the lowest index wins.
     expect(result).toHaveLength(3);
-    expect(result[0].amount).toBe(33.33);
+    expect(result[0].amount).toBe(33.34);
     expect(result[1].amount).toBe(33.33);
-    expect(result[2].amount).toBe(33.34);
+    expect(result[2].amount).toBe(33.33);
 
-    // The sum must equal the original total exactly
-    const total = result.reduce((sum, s) => sum + s.amount, 0);
-    expect(total).toBe(100);
+    // Sum via integer cents — reordering the remainder addition can produce
+    // IEEE-754 float noise (e.g. 100.00000000000001) with a plain toBe(100).
+    const totalCents = result.reduce((sum, s) => sum + Math.round(s.amount * 100), 0);
+    expect(totalCents).toBe(10000);
   });
 
   it('handles zero total amount', () => {
@@ -52,6 +54,29 @@ describe('calculateEqualSplits', () => {
     expect(result[4].amount).toBe(0.2);
     const total = result.reduce((sum, s) => sum + s.amount, 0);
     expect(total).toBe(1);
+  });
+
+  it('breaks an exact remainder tie by lowest original index, not the last participant', () => {
+    const result = calculateEqualSplits(1, ['a', 'b', 'c']);
+    expect(result[0].amount).toBe(0.34);
+    expect(result[1].amount).toBe(0.33);
+    expect(result[2].amount).toBe(0.33);
+  });
+
+  it('never produces a negative amount when splitting a small total across many members', () => {
+    // Reviewer-found regression: "last member absorbs the remainder" can push
+    // that member's amount negative once enough members accumulate rounding
+    // loss (confirmed: the old algorithm gave the 30th member -0.01 here).
+    const memberIds = Array.from({ length: 30 }, (_, i) => `u${i}`);
+    const result = calculateEqualSplits(3.18, memberIds);
+
+    expect(result).toHaveLength(30);
+    result.forEach((s) => expect(s.amount).toBeGreaterThanOrEqual(0));
+    result.slice(0, 18).forEach((s) => expect(s.amount).toBe(0.11));
+    result.slice(18).forEach((s) => expect(s.amount).toBe(0.1));
+
+    const totalCents = result.reduce((sum, s) => sum + Math.round(s.amount * 100), 0);
+    expect(totalCents).toBe(318);
   });
 });
 
@@ -139,11 +164,10 @@ describe('calculatePercentageSplits', () => {
 
   it('rescales percentages within epsilon tolerance so cents still sum exactly to the total', () => {
     // Reviewer-found regression: percentages summing to 100.0066 (within the
-    // 0.01 epsilon tolerance, so the sum guard passes) must NOT feed raw
-    // percentages into the cents math — that would make the distributed cents
-    // overshoot totalCents and corrupt leftoverCents (potentially negative or
-    // larger than splits.length, which `order.slice(0, leftoverCents)` would
-    // silently mis-handle). Normalizing to exactly 100 first fixes this.
+    // 0.01 epsilon tolerance, so the sum guard passes) must still land on
+    // exactly totalCents. apportionCents divides each weight by weightSum
+    // internally, which is equivalent to rescaling to exactly 100 first —
+    // there is no separate normalization step to get wrong.
     const result = calculatePercentageSplits(10000, [
       { userId: 'u1', percentage: 60.0033 },
       { userId: 'u2', percentage: 40.0033 },
@@ -222,6 +246,81 @@ describe('calculatePercentageSplits', () => {
     expect(() =>
       calculatePercentageSplits(100, [{ userId: 'u3', percentage: 33.34 }]),
     ).toThrow(AppError);
+  });
+});
+
+describe('calculateCollectiveSplits', () => {
+  it('returns empty array when no participants', () => {
+    expect(calculateCollectiveSplits([], 10, [])).toEqual([]);
+    expect(calculateCollectiveSplits([], 10, null)).toEqual([]);
+  });
+
+  it('distributes shared costs equally among participants', () => {
+    const result = calculateCollectiveSplits(
+      [{ userId: 'u1', amount: 10 }, { userId: 'u2', amount: 20 }],
+      30,
+      ['u1', 'u2'],
+    );
+    // u1: 10 (item) + 15 (shared) = 25
+    // u2: 20 (item) + 15 (shared) = 35
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual({ userId: 'u1', amount: 25 });
+    expect(result[1]).toEqual({ userId: 'u2', amount: 35 });
+  });
+
+  it('remainder cent on the shared-cost split goes to the lowest tied index', () => {
+    const result = calculateCollectiveSplits(
+      [
+        { userId: 'u1', amount: 10 },
+        { userId: 'u2', amount: 10 },
+        { userId: 'u3', amount: 10 },
+      ],
+      100, // shared costs to split among 3
+      ['u1', 'u2', 'u3'],
+    );
+    // shared per person: 100/3 = 33.33..., all three remainders tie, so the
+    // lowest index wins — not the last participant.
+    expect(result[0].amount).toBe(43.34); // 10 + 33.34
+    expect(result[1].amount).toBe(43.33); // 10 + 33.33
+    expect(result[2].amount).toBe(43.33); // 10 + 33.33
+
+    // Sum via integer cents to avoid IEEE-754 float accumulation noise.
+    const totalCents = result.reduce((sum, s) => sum + Math.round(s.amount * 100), 0);
+    expect(totalCents).toBe(13000);
+  });
+
+  it('assigns zero for participants not in items map', () => {
+    const result = calculateCollectiveSplits(
+      [{ userId: 'u1', amount: 15 }],
+      50,
+      ['u1', 'u2'],
+    );
+    // u1: 15 + 25 = 40, u2: 0 + 25 = 25
+    expect(result[0]).toEqual({ userId: 'u1', amount: 40 });
+    expect(result[1]).toEqual({ userId: 'u2', amount: 25 });
+  });
+
+  it('handles zero shared costs', () => {
+    const result = calculateCollectiveSplits(
+      [{ userId: 'u1', amount: 50 }, { userId: 'u2', amount: 50 }],
+      0,
+      ['u1', 'u2'],
+    );
+    expect(result[0].amount).toBe(50);
+    expect(result[1].amount).toBe(50);
+  });
+
+  it('never produces a negative amount when shared costs are split across many participants with no reported items', () => {
+    const participantIds = Array.from({ length: 30 }, (_, i) => `u${i}`);
+    const result = calculateCollectiveSplits([], 3.18, participantIds);
+
+    expect(result).toHaveLength(30);
+    result.forEach((s) => expect(s.amount).toBeGreaterThanOrEqual(0));
+    result.slice(0, 18).forEach((s) => expect(s.amount).toBe(0.11));
+    result.slice(18).forEach((s) => expect(s.amount).toBe(0.1));
+
+    const totalCents = result.reduce((sum, s) => sum + Math.round(s.amount * 100), 0);
+    expect(totalCents).toBe(318);
   });
 });
 
