@@ -102,15 +102,97 @@ The system MUST use 2 decimal places for all monetary calculations. The system S
 - WHEN system calculates splits
 - THEN splits: 33.33, 33.33, 33.34 (last participant absorbs rounding)
 
-### Requirement: Balance Mode Compatibility
+### Requirement: Balance Calculation Identical Across Modes
 
-The system SHOULD compute balances identically for both DYNAMIC and STATIC balance mode groups. The closure workflow for STATIC groups is out of scope for this change.
+The system MUST calculate balances using the same base algorithm for both DYNAMIC and STATIC groups. Every accepted payment MUST trigger a balance recalculation. Every new expense MUST trigger a balance recalculation. The system MUST NOT apply different balance logic based on group mode, EXCEPT that a STATIC group's period balances (via `getPeriodBalances`) reflect only direct debts while the period is CLOSING (see "No Transitive Debt Simplification During Closure").
 
-#### Scenario: STATIC balance mode group
+#### Scenario: STATIC group recalculates balance on accepted payment
 
-- GIVEN group with balanceMode "STATIC" and members A, B; A paid 100 split equally
-- WHEN user requests `GET /groups/1/balances`
-- THEN system returns same balance calculation as DYNAMIC mode (placeholder behavior)
+- GIVEN STATIC group in a CLOSING period where user1 owes user2 $50
+- WHEN user1 registers a payment and user2 (creditor) accepts it
+- THEN system recalculates the period balance, reducing user1's direct debt to user2
+
+#### Scenario: DYNAMIC group recalculates balance identically
+
+- GIVEN DYNAMIC group with existing expenses
+- WHEN a payment is accepted
+- THEN system recalculates balance using the same base algorithm as STATIC mode
+
+### Requirement: No Transitive Debt Simplification During Closure
+
+When a STATIC group's current period is in CLOSING state, the balances returned by `getPeriodBalances` MUST reflect only direct obligations — who owes whom, as recorded by expense splits — without transitive cancellation or reassignment. Payments during CLOSING MUST reduce only the direct debt between payer and creditor, and MUST NOT alter any other member's debts.
+
+#### Scenario: Direct debt unchanged by payment between other members
+
+- GIVEN STATIC group in CLOSING period where userA owes userB $100 and userB owes userC $100
+- WHEN userB pays userC $100 and userC accepts the payment
+- THEN userB's debt to userC is settled
+- AND userA's debt to userB remains $100 unchanged
+
+#### Scenario: Payment reduces direct debt only during CLOSING
+
+- GIVEN STATIC group in CLOSING period where user1 owes user2 $100 directly
+- WHEN user1 pays user2 $60 and user2 accepts
+- THEN user1's debt to user2 becomes $40
+- AND no other member's debts change as a side effect
+
+### Requirement: STATIC Closure Period Freezes Expense Creation
+
+The system MUST block new expense creation for STATIC groups when the current period's status is CLOSING (see `expense-management`'s "Period-Scoped Expense Creation for STATIC Groups"). During CLOSING, only payment registration and acceptance are permitted — no new expenses can alter the period's balance computation.
+
+#### Scenario: Expense creation blocked during CLOSING
+
+- GIVEN STATIC group with current period in CLOSING status
+- WHEN a member attempts to create a new expense
+- THEN system rejects the expense creation with HTTP 409 `{ code: "PERIOD_FROZEN" }`
+
+### Requirement: DYNAMIC Continuous Balance Behavior
+
+DYNAMIC groups MUST operate with continuous balance calculation and no closure periods. The system MUST NOT impose period boundaries or closures on DYNAMIC groups.
+
+#### Scenario: DYNAMIC balance has no period boundary
+
+- GIVEN DYNAMIC group where userA, userB, and userC are members
+- WHEN any payment or expense is recorded
+- THEN balances recalculate continuously; no closure or period boundary applies
+
+### Requirement: Historical Balance Query
+
+The system MUST allow querying balances for a specific period via `GET /groups/:groupId/periods/:periodId/balances`. For a CLOSED or FINAL period, the system MUST return the balances as frozen at closure time. For an OPEN or CLOSING period, the system MUST return live-calculated balances.
+
+#### Scenario: Query closed period balances
+
+- GIVEN STATIC group with period 1 (CLOSED) and period 2 (OPEN)
+- WHEN user requests `GET /groups/:groupId/periods/1/balances`
+- THEN system returns the frozen balances from period 1 as they were at closure time
+
+#### Scenario: Query open period balances
+
+- GIVEN STATIC group with period 2 (OPEN)
+- WHEN user requests `GET /groups/:groupId/periods/2/balances`
+- THEN system returns live-calculated balances for period 2
+
+### Requirement: Closure Balance Precondition Check
+
+Closure completion (`completeClosure`, `partialClosure`, `finalClosure`) MUST verify that every active member's net balance in the current period is already zero (within a 0.01 tolerance) before proceeding. The system MUST NOT zero or reset balances as part of closing — this check is a precondition gate, not a balance-mutating action. If any member's balance is non-zero, the system MUST reject the closure with HTTP 409 `{ code: "CLOSURE_BLOCKED" }` and perform no state transition.
+
+#### Scenario: Closure blocked when unsettled debts remain
+
+- GIVEN STATIC group in CLOSING period where user1 still owes user2 $30
+- WHEN owner attempts to complete closure
+- THEN system returns HTTP 409 with `{ code: "CLOSURE_BLOCKED" }`; the period remains CLOSING and no balances are modified
+
+#### Scenario: Partial closure opens a new period with nothing carried over
+
+- GIVEN STATIC group in CLOSING period where all debts are already settled and all payments accepted
+- WHEN owner performs a partial closure
+- THEN the current period transitions to CLOSED and a new OPEN period is created with no expenses or payments of its own
+
+#### Scenario: Final closure permanently locks the group
+
+- GIVEN STATIC group in CLOSING period where all debts are already settled
+- WHEN owner performs a final closure
+- THEN the period transitions to FINAL, `group.status` is set to CLOSED, and no further expenses or periods can be created
 
 ### Requirement: Exclude Soft-Deleted Records From Balance, Period, and Closure Queries
 

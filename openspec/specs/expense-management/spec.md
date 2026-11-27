@@ -424,9 +424,41 @@ The system MUST allow only the expense creator to unlock a COMPLETED COLLECTIVE 
 - WHEN backend returns HTTP 403 FORBIDDEN
 - THEN the frontend displays a visible error; no bare `catch {}` swallows it
 
+### Requirement: Period-Scoped Expense Creation for STATIC Groups
+
+The system MUST link every new expense created in a STATIC group to the group's current period, identified via `Period.isCurrent` (there is no `Group.currentPeriodId` column — `Period.isCurrent`, enforced by a partial unique index per `groupId`, is the sole current-period mechanism). The system SHALL automatically set the created expense's `periodId` to that period's `id`. If the current period's status is CLOSING, the system MUST reject expense creation with HTTP 409 `{ code: "PERIOD_FROZEN" }`. If the group's `status` is CLOSED, the system MUST reject any expense creation or edit with HTTP 403 `{ code: "GROUP_CLOSED" }`.
+
+#### Scenario: Expense created in OPEN period of STATIC group
+
+- GIVEN STATIC group with a current period (`isCurrent=true`, status OPEN)
+- WHEN member submits `POST /groups/:groupId/expenses` with valid expense data
+- THEN system creates the expense with `periodId` set to that period's id and returns HTTP 201
+
+#### Scenario: Expense creation blocked during CLOSING period
+
+- GIVEN STATIC group whose current period has status CLOSING
+- WHEN member submits `POST /groups/:groupId/expenses`
+- THEN system returns HTTP 409 with `{ code: "PERIOD_FROZEN" }`
+
+#### Scenario: Expense creation blocked in CLOSED group
+
+- GIVEN STATIC group with `group.status = CLOSED`
+- WHEN member submits `POST /groups/:groupId/expenses`
+- THEN system returns HTTP 403 with `{ code: "GROUP_CLOSED" }`
+
+### Requirement: DYNAMIC Groups Unaffected by Period Logic
+
+The system MUST NOT require or set `periodId` for expenses in DYNAMIC groups. DYNAMIC-group expense creation MUST never be blocked by period status or group closure state, since DYNAMIC groups have no periods.
+
+#### Scenario: DYNAMIC group expense creation unchanged
+
+- GIVEN DYNAMIC group (no periods exist)
+- WHEN member submits `POST /groups/:groupId/expenses` with valid expense data
+- THEN system creates the expense with `periodId=null` and returns HTTP 201
+
 ### Requirement: List Group Expenses
 
-The system MUST return all expenses for a group, including their status and split type. The system SHALL include COLLECTIVE expenses regardless of status.
+The system MUST return all expenses for a group, including their status and split type. The system SHALL include COLLECTIVE expenses regardless of status. For STATIC groups, when neither `periodId` nor `includeHistory` is supplied, the system MUST default to listing only the current period's expenses (via `Period.isCurrent`). The system MUST accept `?periodId=<id>` to filter expenses to a specific period, and `?includeHistory=true` to return expenses across all periods. DYNAMIC groups MUST ignore both parameters and always return all expenses, since DYNAMIC groups have no periods.
 
 #### Scenario: List expenses with mixed types
 
@@ -439,3 +471,27 @@ The system MUST return all expenses for a group, including their status and spli
 - GIVEN authenticated user is not member of group 1
 - WHEN user requests `GET /groups/1/expenses`
 - THEN system returns HTTP 404 with `{ error: "Group not found", code: "NOT_FOUND" }`
+
+#### Scenario: STATIC group lists current period expenses by default
+
+- GIVEN STATIC group with period 1 (CLOSED, 2 expenses) and period 2 (current, OPEN, 3 expenses)
+- WHEN user requests `GET /groups/:groupId/expenses`
+- THEN system returns only the 3 expenses from period 2
+
+#### Scenario: STATIC group queries specific period expenses
+
+- GIVEN STATIC group with period 1 (CLOSED, 2 expenses)
+- WHEN user requests `GET /groups/:groupId/expenses?periodId=1`
+- THEN system returns the 2 expenses from period 1
+
+#### Scenario: STATIC group lists all periods with includeHistory
+
+- GIVEN STATIC group with period 1 (CLOSED, 2 expenses) and period 2 (OPEN, 3 expenses)
+- WHEN user requests `GET /groups/:groupId/expenses?includeHistory=true`
+- THEN system returns all 5 expenses across both periods
+
+#### Scenario: DYNAMIC group ignores period query parameters
+
+- GIVEN DYNAMIC group with 5 expenses (no periods)
+- WHEN user requests `GET /groups/:groupId/expenses?periodId=1`
+- THEN system returns all 5 expenses, ignoring the `periodId` parameter

@@ -12,6 +12,8 @@ The system MUST allow authenticated group members to record payments. The system
 
 The system MUST return HTTP 201 with created payment.
 
+For STATIC groups, the system MUST auto-link the created payment's `periodId` to the group's current period (identified via `Period.isCurrent`); for DYNAMIC groups, `periodId` MUST be `null`. The system MUST default every created payment's `status` to `PENDING` unconditionally, for both STATIC and DYNAMIC groups — there is no `balanceMode`-based branch on the default status.
+
 #### Scenario: Record payment between members
 
 - GIVEN authenticated user (id 1) is member of group with users 1 and 2
@@ -35,6 +37,46 @@ The system MUST return HTTP 201 with created payment.
 - GIVEN authenticated user (id 1) is member of group 1
 - WHEN user submits `POST /groups/1/payments` with `{ fromUserId: 1, toUserId: 2, amount: -50 }`
 - THEN system returns HTTP 400 with `{ error: "Amount must be positive", code: "VALIDATION_ERROR" }`
+
+#### Scenario: STATIC group payment auto-linked to current period
+
+- GIVEN STATIC group with a current period (`isCurrent=true`)
+- WHEN member records `POST /groups/:groupId/payments` with valid payment data
+- THEN system creates the payment with `periodId` set to the current period's id and `status=PENDING`
+
+#### Scenario: DYNAMIC group payment has no periodId
+
+- GIVEN DYNAMIC group (no periods exist)
+- WHEN member records a payment
+- THEN system creates the payment with `periodId=null` and `status=PENDING`
+
+### Requirement: List Group Payments with Period Filter
+
+For STATIC groups, when neither `periodId` nor `includeHistory` is supplied, the system MUST default to listing only the current period's payments (via `Period.isCurrent`). The system MUST accept `?periodId=<id>` to filter payments to a specific period, and `?includeHistory=true` to return payments across all periods. DYNAMIC groups MUST ignore both parameters and always return all payments, since DYNAMIC groups have no periods.
+
+#### Scenario: STATIC group lists current period payments by default
+
+- GIVEN STATIC group with period 1 (CLOSED, 2 payments) and period 2 (current, OPEN, 1 payment)
+- WHEN user requests `GET /groups/:groupId/payments`
+- THEN system returns only the 1 payment from period 2
+
+#### Scenario: STATIC group queries specific period payments
+
+- GIVEN STATIC group with period 1 (CLOSED, 2 payments)
+- WHEN user requests `GET /groups/:groupId/payments?periodId=1`
+- THEN system returns the 2 payments from period 1
+
+#### Scenario: STATIC group lists all periods with includeHistory
+
+- GIVEN STATIC group with period 1 (CLOSED, 2 payments) and period 2 (OPEN, 1 payment)
+- WHEN user requests `GET /groups/:groupId/payments?includeHistory=true`
+- THEN system returns all 3 payments across both periods
+
+#### Scenario: DYNAMIC group lists all payments without filtering
+
+- GIVEN DYNAMIC group with 5 payments (no periods)
+- WHEN user requests `GET /groups/:groupId/payments`
+- THEN system returns all 5 payments (existing behavior, no period filter)
 
 ### Requirement: List Group Payments
 
